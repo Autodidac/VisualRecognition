@@ -2,7 +2,7 @@
 
 Use this checklist for every change to keep the project consistent and releasable.
 
-- [ ] Review `VERSION` and bump it when behavior or UI changes in a user-visible way.
+- [ ] Review `VERSION` and bump it when behavior or UI changes in a user-visible way (see `docs/VERSIONING.md`).
 - [ ] Update `README.md` and relevant docs to describe new capabilities or workflows.
 - [ ] Keep `docs/CONTRIBUTOR_QUICKSTART.md` accurate when runtime flows or file locations change.
 - [ ] Run local builds in Visual Studio (Debug/Release) and verify the app launches.
