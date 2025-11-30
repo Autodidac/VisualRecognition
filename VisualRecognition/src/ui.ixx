@@ -71,12 +71,20 @@ namespace
 
     std::filesystem::path GetModelPath()
     {
+        wchar_t buffer[MAX_PATH]{};
+        DWORD len = ::GetModuleFileNameW(nullptr, buffer, static_cast<DWORD>(std::size(buffer)));
+        if (len > 0 && len < std::size(buffer))
+        {
+            std::filesystem::path exePath(buffer);
+            return exePath.parent_path() / kModelFile;
+        }
+
         std::error_code ec{};
         auto cwd = std::filesystem::current_path(ec);
-        if (ec)
-            return std::filesystem::path(kModelFile);
+        if (!ec)
+            return cwd / kModelFile;
 
-        return cwd / kModelFile;
+        return std::filesystem::path(kModelFile);
     }
 
     std::filesystem::path GetSettingsPath()
