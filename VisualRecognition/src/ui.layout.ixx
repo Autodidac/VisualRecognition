@@ -520,13 +520,16 @@ namespace ui::detail
 
                 std::string labelUtf8 = narrow_utf8(label);
                 auto patchSize = g_ai.patch_size();
-                if (patchSize.first <= 0 || patchSize.second <= 0)
+                int targetW = patchSize.first;
+                int targetH = patchSize.second;
+
+                if (targetW <= 0 || targetH <= 0)
                 {
-                    SetStatus(L"Invalid model patch size.");
-                    break;
+                    targetW = cap->width;
+                    targetH = cap->height;
                 }
 
-                if (cap->width >= patchSize.first && cap->height >= patchSize.second)
+                if (cap->width >= targetW && cap->height >= targetH)
                 {
                     if (!g_ai.add_example_bgra32(cap->pixels, cap->width, cap->height, labelUtf8))
                     {
