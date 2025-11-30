@@ -24,6 +24,11 @@
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\pixelai.ixx" />
+    <ClCompile Include="src\ui.capture.ixx" />
+    <ClCompile Include="src\ui.common.ixx" />
+    <ClCompile Include="src\ui.filesystem.ixx" />
+    <ClCompile Include="src\ui.hooks.ixx" />
+    <ClCompile Include="src\ui.layout.ixx" />
     <ClCompile Include="src\ui.ixx" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
