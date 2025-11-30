@@ -4,6 +4,7 @@ module;
 #include "ids.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -164,14 +165,30 @@ namespace ui::detail
 
     static bool g_inCapture = false;
 
+    struct CaptureGuard
+    {
+        bool&               reentry;
+        std::atomic_bool&   hookFlag;
+
+        CaptureGuard(bool& r, std::atomic_bool& f) : reentry(r), hookFlag(f)
+        {
+            reentry = true;
+            hookFlag.store(true, std::memory_order_relaxed);
+        }
+
+        ~CaptureGuard()
+        {
+            reentry = false;
+            hookFlag.store(false, std::memory_order_relaxed);
+        }
+    };
+
     export void DoCapture()
     {
         if (g_inCapture)
             return;
 
-        struct Guard { bool& f; ~Guard() { f = false; } };
-        g_inCapture = true;
-        Guard guard{ g_inCapture };
+        CaptureGuard guard{ g_inCapture, g_isCapturing };
 
         auto capOpt = CapturePatchAroundCursor();
         if (!capOpt)
@@ -189,7 +206,11 @@ namespace ui::detail
         const int newIndex = static_cast<int>(g_history.size()) - 1;
         SelectCapture(newIndex);
 
-        SetStatus(L"Captured patch around cursor.");
+        std::wstringstream status;
+        status << L"Captured patch around cursor ("
+               << g_history.size()
+               << L" stored).";
+        SetStatus(status.str());
 
         macro::g_lastTick.store(macro::nowMs());
     }
@@ -300,6 +321,39 @@ namespace ui::detail
         SetStatus(L"Selected next capture.");
     }
 
+    export void ClearHistory()
+    {
+        if (g_history.empty())
+        {
+            SetStatus(L"No captures to clear.");
+            return;
+        }
+
+        std::size_t deletedFiles = 0;
+        for (const auto& entry : g_history)
+        {
+            if (!entry.filePath)
+                continue;
+
+            std::error_code ec;
+            if (std::filesystem::remove(*entry.filePath, ec))
+                ++deletedFiles;
+        }
+
+        g_history.clear();
+        g_selectedIndex = -1;
+        UpdateHistoryLabel();
+
+        if (g_preview)
+            ::InvalidateRect(g_preview, nullptr, TRUE);
+
+        std::wstringstream status;
+        status << L"Cleared preview and history (deleted "
+               << deletedFiles
+               << L" capture files).";
+        SetStatus(status.str());
+    }
+
     export void DeleteSelectedCapture()
     {
         if (g_history.empty() ||
@@ -356,7 +410,9 @@ namespace ui::detail
         SelectCapture(g_selectedIndex);
         if (!statusMessage.empty())
             statusMessage += L" | ";
-        statusMessage += L"Deleted capture.";
+        statusMessage += L"Deleted capture (";
+        statusMessage += std::to_wstring(static_cast<long long>(g_history.size()));
+        statusMessage += L" remaining).";
         SetStatus(statusMessage);
     }
 
