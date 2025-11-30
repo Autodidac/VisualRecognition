@@ -2,7 +2,7 @@
 
 ## Current State
 - Win32 UI (`src/ui.ixx`) captures a patch around the cursor and displays it in a preview area.
-- Global mouse hook triggers capture on left click even when the app is unfocused; classification is handled by a global F5 keyboard hook.
+- Global mouse hook captures on left click even when the app is unfocused, while classification runs from a global F5 keyboard hook.
 - The `PixelRecognizer` (`src/pixelai.ixx`) stores labeled patches, performs cosine-similarity matching, and saves/loads models to `pixelai_examples.bin`.
 - Learning flow prompts for a label, trains in-memory, and attempts to persist the model immediately.
 - Timestamped backups of `pixelai_examples.bin` are written alongside the model file and trimmed according to the `BackupRetention` setting in `pixelai.ini`.
