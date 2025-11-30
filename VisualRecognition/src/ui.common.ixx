@@ -52,6 +52,7 @@ namespace ui::detail
     export inline PixelRecognizer      g_ai{};
     export inline std::vector<Capture> g_history{};
     export inline int                  g_selectedIndex = -1;
+    export inline std::atomic_bool     g_isCapturing = false;
 
     // -----------------------------------------------------------------
     // Helper API exported for other partitions

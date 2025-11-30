@@ -4,8 +4,9 @@ module;
 
 export module vr.macro.core;
 
-import std;
 export import vr.macro.types;   // re-export control/types API
+
+import std;
 import vr.console_log;
 
 namespace macro

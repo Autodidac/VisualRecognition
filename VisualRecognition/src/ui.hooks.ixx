@@ -1,87 +1,127 @@
-module;
+ï»¿module;
 #define NOMINMAX
 #include <windows.h>
 #include "ids.hpp"
 
 export module ui:hooks;
 
+import :common;
+import std;
+
 namespace ui
 {
     namespace detail
     {
-        using CaptureCallback = void(*)();
+        inline HHOOK g_uiMouseHook = nullptr;
+        extern HWND g_mainWindow;        // defined in ui:common
+        extern std::atomic_bool g_isCapturing;
 
-        inline HHOOK           g_uiMouseHook = nullptr;
-        inline HWND            g_uiMainWindow = nullptr;
-        inline CaptureCallback g_captureCallback = nullptr;
+        // Helper: determine if a window belongs to our UI
+        // (catches theme child windows, compositor layers, owner-draw wrappers)
+        static bool IsInUi(HWND h)
+        {
+            while (h)
+            {
+                if (h == ui::detail::g_mainWindow)
+                    return true;
+                h = ::GetParent(h);
+            }
+            return false;
+        }
 
-        // ---------------------------------------------------------------------
-        // Corrected LL mouse hook
-        // ---------------------------------------------------------------------
+        // --------------------------------------------------------------------
+        // LOW-LEVEL MOUSE HOOK
+        // --------------------------------------------------------------------
         LRESULT CALLBACK UiMouseProc(int code, WPARAM wp, LPARAM lp)
         {
             if (code < 0)
-                return CallNextHookEx(g_uiMouseHook, code, wp, lp);
+                return ::CallNextHookEx(g_uiMouseHook, code, wp, lp);
 
             auto* m = reinterpret_cast<MSLLHOOKSTRUCT*>(lp);
 
-            // Ignore injected mouse events (script playback, automation, etc.)
+            // Ignore artificial events (macro playback, SendInput)
             if (m->flags & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED))
-                return CallNextHookEx(g_uiMouseHook, code, wp, lp);
+                return ::CallNextHookEx(g_uiMouseHook, code, wp, lp);
 
-            // Only activate capture on actual LButtonUP
-            if (wp == WM_LBUTTONUP && g_captureCallback)
+            // Disable hook-triggered capture during DoCapture
+            if (ui::detail::g_isCapturing.load(std::memory_order_relaxed))
+                return ::CallNextHookEx(g_uiMouseHook, code, wp, lp);
+
+            // Only check real left-button release
+            if (wp == WM_LBUTTONUP && ui::detail::g_mainWindow)
             {
-                HWND underCursor = WindowFromPoint(m->pt);
+                HWND underCursor = ::WindowFromPoint(m->pt);
 
-                // Fix #1 — Only trigger if our app is foreground
-                HWND fg = GetForegroundWindow();
-                if (!fg || GetWindowThreadProcessId(fg, nullptr) != GetCurrentProcessId())
-                    return CallNextHookEx(g_uiMouseHook, code, wp, lp);
+                // If cursor is inside *any* UI descendant â†’ skip capture
+                if (underCursor && IsInUi(underCursor))
+                    return ::CallNextHookEx(g_uiMouseHook, code, wp, lp);
 
-                // Fix #2 — If the click is inside our main window OR a child, ignore it
-                if (underCursor &&
-                    (underCursor == g_uiMainWindow ||
-                        IsChild(g_uiMainWindow, underCursor)))
+                // Explicit control IDs that must never trigger capture
+                static constexpr int kSkipIds[] =
                 {
-                    return CallNextHookEx(g_uiMouseHook, code, wp, lp);
+                    IDC_BTN_PREV, IDC_BTN_NEXT, IDC_BTN_DELETE, IDC_BTN_CLASSIFY,
+                    IDC_BTN_LEARN, IDC_BTN_CAPTURE, IDC_BTN_PROMPT,
+                    IDC_MACRO_RECORD, IDC_MACRO_CLEAR, IDC_MACRO_PLAY,
+                    IDC_MACRO_REPEAT, IDC_MACRO_EXIT,
+                    IDC_STATUS, IDC_HISTORY, IDC_PREVIEW, IDC_LOG_EDIT
+                };
+
+                // Check if the cursor is over these controls or any of their children
+                for (int id : kSkipIds)
+                {
+                    HWND h = ::GetDlgItem(ui::detail::g_mainWindow, id);
+                    if (!h)
+                        continue;
+
+                    // Direct hit on control
+                    if (underCursor == h)
+                        return ::CallNextHookEx(g_uiMouseHook, code, wp, lp);
+
+                    // Check ancestry chain: underCursor child â†’ control parent
+                    HWND parent = underCursor;
+                    while (parent)
+                    {
+                        if (parent == h)
+                            return ::CallNextHookEx(g_uiMouseHook, code, wp, lp);
+                        parent = ::GetParent(parent);
+                    }
                 }
 
-                // Fix #3 — Now perform capture (external click)
-                g_captureCallback();
+                // ------------------------------
+                // Outside-click confirmed â†’ CAPTURE
+                // ------------------------------
+                ::PostMessageW(ui::detail::g_mainWindow, WM_USER + 101, 0, 0);
+
+                return ::CallNextHookEx(g_uiMouseHook, code, wp, lp);
             }
 
-            return CallNextHookEx(g_uiMouseHook, code, wp, lp);
+            return ::CallNextHookEx(g_uiMouseHook, code, wp, lp);
         }
-    }
 
-    // ---------------------------------------------------------------------
-    // Public API
-    // ---------------------------------------------------------------------
+    } // namespace detail
+
+    // --------------------------------------------------------------------
+    // PUBLIC API
+    // --------------------------------------------------------------------
 
     export void SetUiMainWindow(HWND hwnd) noexcept
     {
-        detail::g_uiMainWindow = hwnd;
-    }
-
-    export void SetCaptureCallback(detail::CaptureCallback cb) noexcept
-    {
-        detail::g_captureCallback = cb;
+        detail::g_mainWindow = hwnd;
     }
 
     export bool InstallUiMouseHook(HINSTANCE inst)
     {
         detail::g_uiMouseHook =
-            SetWindowsHookExW(WH_MOUSE_LL, detail::UiMouseProc, inst, 0);
+            ::SetWindowsHookExW(WH_MOUSE_LL, detail::UiMouseProc, inst, 0);
 
-        return detail::g_uiMouseHook != nullptr;
+        return (detail::g_uiMouseHook != nullptr);
     }
 
     export void UninstallUiMouseHook()
     {
         if (detail::g_uiMouseHook)
         {
-            UnhookWindowsHookEx(detail::g_uiMouseHook);
+            ::UnhookWindowsHookEx(detail::g_uiMouseHook);
             detail::g_uiMouseHook = nullptr;
         }
     }

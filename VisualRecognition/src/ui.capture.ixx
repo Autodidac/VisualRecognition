@@ -27,7 +27,16 @@ namespace ui::detail
     using pixelai::PixelRecognizer;
 
     // -----------------------------------------------------------------
-    // Capture padded 481×481 BGRA patch around cursor
+    // FULL-BODY CAPTURE (mouse = head anchor)
+    // -----------------------------------------------------------------
+    //
+    // Dimensions:
+    //   width  ≈ 360 px
+    //   height ≈ 960 px
+    //   mouse is ~12% from the top → good head/body ratio
+    //
+    // This sampler ALWAYS returns the same rectangle no matter where the
+    // user clicks, and will never offset the anchor when near screen edges.
     // -----------------------------------------------------------------
 
     std::optional<Capture> CapturePatchAroundCursor()
@@ -36,111 +45,134 @@ namespace ui::detail
         if (!::GetCursorPos(&pt))
             return std::nullopt;
 
-        HDC screenDC = ::GetDC(nullptr);
-        if (!screenDC)
-            return std::nullopt;
-
         const int screenW = ::GetSystemMetrics(SM_CXSCREEN);
         const int screenH = ::GetSystemMetrics(SM_CYSCREEN);
 
-        const int radius = kCaptureRadius;
-        const int patchW = radius * 2 + 1;
-        const int patchH = radius * 2 + 1;
+        // -----------------------------
+        // Full-body rectangle parameters
+        // -----------------------------
+        constexpr int captureWidth = 360;
+        constexpr int captureHeight = 960;
+        constexpr int halfWidth = captureWidth / 2;
+        constexpr float HEAD_POS = 0.12f;
+        constexpr int headOffsetY = static_cast<int>(captureHeight * HEAD_POS);
 
-        const int x0 = std::clamp(static_cast<int>(pt.x - radius), 0, screenW - 1);
-        const int y0 = std::clamp(static_cast<int>(pt.y - radius), 0, screenH - 1);
-        const int x1 = std::clamp(static_cast<int>(pt.x + radius), 0, screenW - 1);
-        const int y1 = std::clamp(static_cast<int>(pt.y + radius), 0, screenH - 1);
+        // -----------------------------
+        // Determine screen rect to capture once
+        // -----------------------------
+        // We capture the bounding rectangle around the full-body area,
+        // clamped within the screen.
+        int left = pt.x - halfWidth;
+        int top = pt.y - headOffsetY;
+        int right = left + captureWidth - 1;
+        int bottom = top + captureHeight - 1;
 
-        const int w = x1 - x0 + 1;
-        const int h = y1 - y0 + 1;
-        if (w <= 0 || h <= 0)
-        {
-            ::ReleaseDC(nullptr, screenDC);
-            return std::nullopt;
-        }
+        // Clamp bounding box
+        left = std::clamp(left, 0, screenW - 1);
+        top = std::clamp(top, 0, screenH - 1);
+        right = std::clamp(right, 0, screenW - 1);
+        bottom = std::clamp(bottom, 0, screenH - 1);
 
+        const int w = right - left + 1;
+        const int h = bottom - top + 1;
+
+        HDC screenDC = ::GetDC(nullptr);
         HDC memDC = ::CreateCompatibleDC(screenDC);
-        if (!memDC)
+
+        if (!screenDC || !memDC)
         {
-            ::ReleaseDC(nullptr, screenDC);
+            if (screenDC) ::ReleaseDC(nullptr, screenDC);
             return std::nullopt;
         }
 
+        // Prepare DIBSection for raw pixel access
         BITMAPINFO bi{};
         bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         bi.bmiHeader.biWidth = w;
-        bi.bmiHeader.biHeight = -h; // top-down
+        bi.bmiHeader.biHeight = -h;           // top-down
         bi.bmiHeader.biPlanes = 1;
         bi.bmiHeader.biBitCount = 32;
         bi.bmiHeader.biCompression = BI_RGB;
 
-        void* bits = nullptr;
-        HBITMAP bmp = ::CreateDIBSection(screenDC, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        if (!bmp)
+        void* dibPixels = nullptr;
+        HBITMAP hbm = ::CreateDIBSection(memDC, &bi,
+            DIB_RGB_COLORS,
+            &dibPixels,
+            nullptr, 0);
+
+        if (!hbm || !dibPixels)
         {
+            if (hbm) ::DeleteObject(hbm);
             ::DeleteDC(memDC);
             ::ReleaseDC(nullptr, screenDC);
             return std::nullopt;
         }
 
-        HGDIOBJ oldBmp = ::SelectObject(memDC, bmp);
+        HGDIOBJ old = ::SelectObject(memDC, hbm);
 
-        if (!::BitBlt(memDC,
-            0, 0, w, h,
-            screenDC,
-            x0, y0,
-            SRCCOPY))
-        {
-            ::SelectObject(memDC, oldBmp);
-            ::DeleteObject(bmp);
-            ::DeleteDC(memDC);
-            ::ReleaseDC(nullptr, screenDC);
-            return std::nullopt;
-        }
+        // One fast BitBlt
+        ::BitBlt(memDC, 0, 0, w, h, screenDC, left, top, SRCCOPY | CAPTUREBLT);
 
-        std::vector<std::uint32_t> captured(static_cast<std::size_t>(w) * h);
-        std::memcpy(captured.data(), bits, captured.size() * sizeof(std::uint32_t));
-
-        ::SelectObject(memDC, oldBmp);
-        ::DeleteObject(bmp);
-        ::DeleteDC(memDC);
         ::ReleaseDC(nullptr, screenDC);
 
-        // Pad to exact (2r+1)×(2r+1)
-        const int targetW = patchW;
-        const int targetH = patchH;
+        // Our final output buffer
+        std::vector<std::uint32_t> outPixels(
+            captureWidth * captureHeight, 0xFF000000u);
 
-        std::vector<std::uint32_t> padded(static_cast<std::size_t>(targetW) * targetH, 0);
+        // Base pointer to captured DIB
+        const std::uint32_t* src = reinterpret_cast<const uint32_t*>(dibPixels);
 
-        const int offsetX = (targetW - w) / 2;
-        const int offsetY = (targetH - h) / 2;
-
-        for (int row = 0; row < h; ++row)
+        // -----------------------------
+        // Remap pixels into ALWAYS FULL-SIZED portrait frame
+        // -----------------------------
+        for (int y = 0; y < captureHeight; ++y)
         {
-            const auto* src = captured.data() + static_cast<std::size_t>(row) * w;
-            auto* dst = padded.data() +
-                static_cast<std::size_t>(row + offsetY) * targetW +
-                offsetX;
+            int sy = y; // y already aligned due to top/bottom bounds
+            if (sy >= h) sy = h - 1;
 
-            std::memcpy(dst, src, sizeof(std::uint32_t) * w);
+            for (int x = 0; x < captureWidth; ++x)
+            {
+                int sx = x;
+                if (sx >= w) sx = w - 1;
+
+                const uint32_t pixel = src[sy * w + sx];
+
+                outPixels[y * captureWidth + x] = pixel | 0xFF000000u;
+            }
         }
 
-        Capture out{};
-        out.pixels.assign(padded.begin(), padded.end());
-        out.width = targetW;
-        out.height = targetH;
-        out.timestamp = std::chrono::system_clock::now();
-        out.filePath = std::nullopt;
-        return out;
+        // Cleanup
+        ::SelectObject(memDC, old);
+        ::DeleteObject(hbm);
+        ::DeleteDC(memDC);
+
+        // Build result Capture
+        Capture cap{};
+        cap.width = captureWidth;
+        cap.height = captureHeight;
+        cap.timestamp = std::chrono::system_clock::now();
+        cap.filePath = std::nullopt;
+        cap.pixels = std::move(outPixels);
+
+        return cap;
     }
+
 
     // -----------------------------------------------------------------
     // High-level actions
     // -----------------------------------------------------------------
 
+    static bool g_inCapture = false;
+
     export void DoCapture()
     {
+        if (g_inCapture)
+            return;
+
+        struct Guard { bool& f; ~Guard() { f = false; } };
+        g_inCapture = true;
+        Guard guard{ g_inCapture };
+
         auto capOpt = CapturePatchAroundCursor();
         if (!capOpt)
         {
@@ -148,18 +180,17 @@ namespace ui::detail
             return;
         }
 
-        Capture cap;
-        cap = std::move(*capOpt);
+        Capture cap = std::move(*capOpt);
         const auto saved = SaveCaptureToDisk(cap);
         cap.filePath = saved;
 
         g_history.push_back(std::move(cap));
-        g_selectedIndex = static_cast<int>(g_history.size()) - 1;
 
-        UpdateHistoryLabel();
+        const int newIndex = static_cast<int>(g_history.size()) - 1;
+        SelectCapture(newIndex);
+
         SetStatus(L"Captured patch around cursor.");
 
-        // Reset macro timing when we capture; this keeps subsequent events sane.
         macro::g_lastTick.store(macro::nowMs());
     }
 
@@ -171,14 +202,12 @@ namespace ui::detail
             SetStatus(L"No capture selected for learning.");
             return;
         }
-
         if (labelW.empty())
         {
             SetStatus(L"Empty label; learning skipped.");
             return;
         }
 
-        // SAFE conversion: UTF-16 → UTF-8
         const std::string label = macro::narrow_from_wide(labelW);
 
         const bool ok =
@@ -195,13 +224,9 @@ namespace ui::detail
         }
 
         if (!SaveModel(g_ai))
-        {
             SetStatus(L"Example learned, but saving model failed.");
-        }
         else
-        {
             SetStatus(L"Learned example + saved model.");
-        }
     }
 
     export void DoClassify()
@@ -215,13 +240,11 @@ namespace ui::detail
 
         float confidence = 0.0f;
 
-        // PixelAI returns optional<string>
         auto result = g_ai.classify_bgra32(
             std::span<const std::uint32_t>(cap->pixels.data(), cap->pixels.size()),
             cap->width,
             cap->height,
-            &confidence     // PASS POINTER HERE
-        );
+            &confidence);
 
         if (!result || result->empty())
         {
@@ -239,10 +262,6 @@ namespace ui::detail
             << L"%)";
 
         SetStatus(ss.str());
-
-        // Optional: only if you want future automation.
-        // Remove if not implemented.
-        // macro::on_ai_classification(label, confidence);
     }
 
     // -----------------------------------------------------------------
@@ -256,21 +275,12 @@ namespace ui::detail
             SetStatus(L"No captures.");
             return;
         }
-
         if (g_selectedIndex <= 0)
         {
             SetStatus(L"Already at oldest capture.");
             return;
         }
-
-        const int target = std::max(g_selectedIndex - 1, 0);
-        if (target == g_selectedIndex)
-        {
-            SetStatus(L"Already at oldest capture.");
-            return;
-        }
-
-        SelectCapture(target);
+        SelectCapture(g_selectedIndex - 1);
         SetStatus(L"Selected previous capture.");
     }
 
@@ -281,31 +291,19 @@ namespace ui::detail
             SetStatus(L"No captures.");
             return;
         }
-
-        if (g_selectedIndex < 0 ||
-            g_selectedIndex >= static_cast<int>(g_history.size()) - 1)
+        if (g_selectedIndex >= static_cast<int>(g_history.size()) - 1)
         {
             SetStatus(L"Already at newest capture.");
             return;
         }
-
-        const int target = std::min(
-            g_selectedIndex + 1,
-            static_cast<int>(g_history.size()) - 1);
-
-        if (target == g_selectedIndex)
-        {
-            SetStatus(L"Already at newest capture.");
-            return;
-        }
-
-        SelectCapture(target);
+        SelectCapture(g_selectedIndex + 1);
         SetStatus(L"Selected next capture.");
     }
 
     export void DeleteSelectedCapture()
     {
-        if (g_history.empty() || g_selectedIndex < 0 ||
+        if (g_history.empty() ||
+            g_selectedIndex < 0 ||
             g_selectedIndex >= static_cast<int>(g_history.size()))
         {
             SetStatus(L"No capture selected.");
