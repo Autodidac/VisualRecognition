@@ -1,6 +1,7 @@
 module;
 #define NOMINMAX
 #include <windows.h>
+
 #include "ids.hpp"
 
 export module ui:hooks;

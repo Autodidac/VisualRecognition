@@ -1,7 +1,9 @@
 module;
 #define NOMINMAX
 #include <windows.h>
+
 #include "ids.hpp"
+
 #include <string>
 #include <print>
 #include <vector>
@@ -133,5 +135,14 @@ namespace ui::detail
         UpdateHistoryLabel();
         if (g_preview)
             ::InvalidateRect(g_preview, nullptr, TRUE);
+    }
+
+    // Helper to get patch size from recognizer, fallback to default
+    inline std::pair<int, int> GetPatchSize()
+    {
+        // If PixelRecognizer does not have patch_size(), fallback to default
+        // You may want to expose patch size via a config or constant
+        // For now, use kDefaultPatchSize for both width and height
+        return { kDefaultPatchSize, kDefaultPatchSize };
     }
 }

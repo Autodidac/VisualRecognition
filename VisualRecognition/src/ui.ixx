@@ -1,3 +1,7 @@
 export module ui;
 
-export import :layout;
+// Ensure the layout module is defined and exported as a partition
+
+export module layout;
+
+// Add layout-related declarations and definitions here
