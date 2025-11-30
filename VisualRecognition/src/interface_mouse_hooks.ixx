@@ -1,11 +1,11 @@
-﻿module;
+module;
 #define NOMINMAX
 #include <windows.h>
-#include "ids.hpp"
+#include "interface_ids.hpp"
 
-export module ui:hooks;
+export module interface.app:mouse_hooks;
 
-import :common;
+import :state;
 import std;
 
 namespace ui
@@ -13,7 +13,7 @@ namespace ui
     namespace detail
     {
         inline HHOOK g_uiMouseHook = nullptr;
-        extern HWND g_mainWindow;        // defined in ui:common
+        extern HWND g_mainWindow;        // defined in interface.app:state
         extern std::atomic_bool g_isCapturing;
 
         // Helper: determine if a window belongs to our UI
