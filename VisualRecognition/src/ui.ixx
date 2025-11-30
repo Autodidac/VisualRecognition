@@ -8,6 +8,8 @@ module;
 #include <optional>
 #include <chrono>
 #include <filesystem>
+#include <mutex>
+#include <sstream>
 
 export module ui;
 
@@ -35,6 +37,29 @@ export void RunUI(HINSTANCE inst, int show)
 
     // Start macro engine
     macro::start_playback_thread();
+
+    if (!macro::load_macro())
+    {
+        consolelog::log("[MACRO] failed to load saved macro");
+        SetStatus(L"Failed to load previous macro.");
+    }
+    else
+    {
+        std::size_t restored = 0;
+        {
+            std::lock_guard guard(macro::g_lock);
+            restored = macro::g_macro.size();
+        }
+
+        std::ostringstream oss;
+        oss << "[MACRO] restored " << restored << " event" << (restored == 1 ? "" : "s");
+        consolelog::log(oss.str());
+
+        std::wostringstream wss;
+        wss << L"Restored " << static_cast<unsigned long long>(restored)
+            << L" macro event" << (restored == 1 ? L"" : L"s");
+        SetStatus(wss.str());
+    }
     macro::install_hooks(inst);
 
     // Install UI low-level mouse hook (click-to-capture)
