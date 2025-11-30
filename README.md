@@ -3,7 +3,7 @@
 VisualRecognition is a Windows desktop utility that captures small pixel patches around the mouse cursor and classifies them using an in-memory example-based model. The tool is geared toward rapid experimentation with visual snippets: capture a region, label it, and immediately reuse it for recognition.
 
 ## Features
-- Global mouse hook for quick capture/classify actions (left-click to capture, right-click to classify) even when the window is not focused.
+- Global hooks for quick actions (left-click to capture anywhere, F5 to classify) even when the window is not focused.
 - Patch preview with simple status messaging.
 - One-click learning: add a labeled patch and persist it to `pixelai_examples.bin`.
 - Lightweight cosine-similarity recognizer implemented in C++20 modules.
@@ -15,9 +15,9 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
 
 ## Run
 - Launch the built executable on Windows.
-- Use the buttons in the UI or mouse hooks:
+- Use the buttons in the UI or hooks:
   - **Left click**: capture a patch around the cursor.
-  - **Right click**: classify the most recent capture.
+  - **F5**: classify the most recent capture globally (even when the app is not focused).
   - **Learn Label**: prompt for a label and persist the model to `pixelai_examples.bin` in the working directory.
 
 ## Project Layout
