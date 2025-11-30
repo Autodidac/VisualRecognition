@@ -15,6 +15,7 @@ module;
 #include <ctime>
 #include <sstream>
 #include <iomanip>
+#include <utility>
 
 export module ui;
 
@@ -32,8 +33,10 @@ namespace
     HWND g_status = nullptr;
     HWND g_preview = nullptr;
     HWND g_historyLabel = nullptr;
+    HWND g_mainWindow = nullptr;
     HHOOK g_mouseHook = nullptr;
     HHOOK g_keyboardHook = nullptr;
+    bool g_mouseHookPaused = false;
 
     PixelRecognizer g_ai{};
 
@@ -466,6 +469,25 @@ namespace
     {
         if (code >= 0)
         {
+            if (g_mouseHookPaused)
+                return ::CallNextHookEx(g_mouseHook, code, wParam, lParam);
+
+            auto belongsToMainWindow = [](HWND hwnd)
+            {
+                if (!hwnd || !g_mainWindow)
+                    return false;
+
+                HWND root = ::GetAncestor(hwnd, GA_ROOT);
+                return root == g_mainWindow;
+            };
+
+            MSLLHOOKSTRUCT* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+            HWND hitWindow = info ? ::WindowFromPoint(info->pt) : nullptr;
+            HWND foreground = ::GetForegroundWindow();
+
+            if (belongsToMainWindow(foreground) || belongsToMainWindow(hitWindow))
+                return ::CallNextHookEx(g_mouseHook, code, wParam, lParam);
+
             switch (wParam)
             {
             case WM_LBUTTONDOWN:
@@ -614,6 +636,7 @@ namespace
         }
 
         g_prompt = PromptState{};
+        bool previousHookPaused = std::exchange(g_mouseHookPaused, true);
 
         const int W = 320;
         const int H = 140;
@@ -657,7 +680,11 @@ namespace
         }
 
         if (g_prompt.accepted)
+        {
+            g_mouseHookPaused = previousHookPaused;
             return g_prompt.result;
+        }
+        g_mouseHookPaused = previousHookPaused;
         return {};
     }
 
@@ -896,6 +923,8 @@ namespace
         {
         case WM_CREATE:
         {
+            g_mainWindow = hwnd;
+
             ::CreateWindowW(L"BUTTON", L"Capture Patch",
                 WS_VISIBLE | WS_CHILD,
                 0, 0, 0, 0,
@@ -1164,6 +1193,7 @@ namespace
                 ::UnhookWindowsHookEx(g_keyboardHook);
                 g_keyboardHook = nullptr;
             }
+            g_mainWindow = nullptr;
             ::PostQuitMessage(0);
             return 0;
         }
