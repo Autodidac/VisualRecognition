@@ -310,6 +310,31 @@ namespace ui::detail
             return;
         }
 
+        const Capture& capture = g_history[static_cast<std::size_t>(g_selectedIndex)];
+
+        std::wstring statusMessage;
+        if (capture.filePath)
+        {
+            std::error_code ec;
+            const bool removed = std::filesystem::remove(*capture.filePath, ec);
+
+            if (ec)
+            {
+                statusMessage = L"Failed to delete capture file: ";
+                statusMessage += capture.filePath->wstring();
+            }
+            else if (!removed)
+            {
+                statusMessage = L"Capture file missing on delete: ";
+                statusMessage += capture.filePath->wstring();
+            }
+            else
+            {
+                statusMessage = L"Deleted capture file: ";
+                statusMessage += capture.filePath->wstring();
+            }
+        }
+
         g_history.erase(g_history.begin() + g_selectedIndex);
 
         if (g_history.empty())
@@ -318,7 +343,10 @@ namespace ui::detail
             UpdateHistoryLabel();
             if (g_preview)
                 ::InvalidateRect(g_preview, nullptr, TRUE);
-            SetStatus(L"Deleted capture; history empty.");
+            if (!statusMessage.empty())
+                statusMessage += L" | ";
+            statusMessage += L"Deleted capture; history empty.";
+            SetStatus(statusMessage);
             return;
         }
 
@@ -326,7 +354,10 @@ namespace ui::detail
             g_selectedIndex = static_cast<int>(g_history.size()) - 1;
 
         SelectCapture(g_selectedIndex);
-        SetStatus(L"Deleted capture.");
+        if (!statusMessage.empty())
+            statusMessage += L" | ";
+        statusMessage += L"Deleted capture.";
+        SetStatus(statusMessage);
     }
 
 } // namespace ui::detail
