@@ -20,6 +20,7 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
   - **Left click**: capture a patch around the cursor.
   - **F5**: classify the most recent capture globally (even when the app is not focused).
   - **Learn Label**: prompt for a label and persist the model to `pixelai_examples.bin` in the working directory.
+- Follow the [bulk data collection guide](docs/BULK_DATA_COLLECTION.md) for recommended steps to capture, organize, label, and save patches for training.
 
 ## Project Layout
 - `VisualRecognition/src/ui.ixx`: Win32 UI, capture logic, and interaction with the recognizer.
