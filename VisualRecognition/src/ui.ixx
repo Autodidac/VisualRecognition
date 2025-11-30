@@ -25,6 +25,7 @@ namespace
     HWND g_status = nullptr;
     HWND g_preview = nullptr;
     HHOOK g_mouseHook = nullptr;
+    HHOOK g_keyboardHook = nullptr;
 
     PixelRecognizer g_ai{};
 
@@ -166,13 +167,30 @@ namespace
             case WM_LBUTTONDOWN:
                 DoCapture();
                 break;
-            case WM_RBUTTONDOWN:
-                DoClassify();
-                break;
             }
         }
 
         return ::CallNextHookEx(g_mouseHook, code, wParam, lParam);
+    }
+
+    // -------------------------------------------------------------------------
+    // GLOBAL KEYBOARD HOOK — F5 triggers classify even when unfocused
+    // -------------------------------------------------------------------------
+    LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wParam, LPARAM lParam)
+    {
+        if (code >= 0)
+        {
+            if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)
+            {
+                auto* kbd = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+                if (kbd && kbd->vkCode == VK_F5)
+                {
+                    DoClassify();
+                }
+            }
+        }
+
+        return ::CallNextHookEx(g_keyboardHook, code, wParam, lParam);
     }
 
     // -------------------------------------------------------------------------
@@ -557,9 +575,26 @@ namespace
 
             if (!g_mouseHook)
             {
-                SetStatus(L"Global mouse hook inactive.");
+                SetStatus(L"Global mouse hook inactive (capture unavailable).");
                 ::MessageBoxW(hwnd,
-                    L"Global mouse hook could not be installed. Capture and classify via mouse clicks will not work.",
+                    L"Global mouse hook could not be installed. Capture via mouse clicks will not work.",
+                    L"Hook Installation Failed",
+                    MB_OK | MB_ICONERROR);
+            }
+
+            // Global low-level keyboard hook for F5 classification
+            g_keyboardHook = ::SetWindowsHookExW(
+                WH_KEYBOARD_LL,
+                KeyboardHookProc,
+                ::GetModuleHandleW(nullptr),
+                0
+            );
+
+            if (!g_keyboardHook)
+            {
+                SetStatus(L"Global keyboard hook inactive (F5 classify unavailable).");
+                ::MessageBoxW(hwnd,
+                    L"Global keyboard hook could not be installed. Use the Classify button instead.",
                     L"Hook Installation Failed",
                     MB_OK | MB_ICONERROR);
             }
@@ -643,6 +678,11 @@ namespace
             {
                 ::UnhookWindowsHookEx(g_mouseHook);
                 g_mouseHook = nullptr;
+            }
+            if (g_keyboardHook)
+            {
+                ::UnhookWindowsHookEx(g_keyboardHook);
+                g_keyboardHook = nullptr;
             }
             ::PostQuitMessage(0);
             return 0;
