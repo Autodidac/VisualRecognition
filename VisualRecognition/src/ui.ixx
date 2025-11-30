@@ -29,6 +29,7 @@ namespace
     constexpr int  kCaptureRadius = 240;
     constexpr char kModelFile[] = "pixelai_examples.bin";
     constexpr int  kDefaultBackupRetention = 5;
+    constexpr int  kDefaultPatchSize = 1;
 
     HWND g_status = nullptr;
     HWND g_preview = nullptr;
@@ -98,6 +99,26 @@ namespace
         return exePath.parent_path() / L"pixelai.ini";
     }
 
+    bool EnsureSettingsFile()
+    {
+        auto ini = GetSettingsPath();
+        if (std::filesystem::exists(ini))
+            return true;
+
+        std::error_code ec{};
+        auto parent = ini.parent_path();
+        if (!parent.empty())
+            std::filesystem::create_directories(parent, ec);
+
+        std::wofstream ofs(ini);
+        if (!ofs)
+            return false;
+
+        ofs << L"[Saving]\n";
+        ofs << L"BackupRetention=" << kDefaultBackupRetention << L"\n";
+        return ofs.good();
+    }
+
     int GetBackupRetention()
     {
         auto ini = GetSettingsPath();
@@ -112,6 +133,29 @@ namespace
         }
 
         return kDefaultBackupRetention;
+    }
+
+    bool CreatePlaceholderModelFile(const std::filesystem::path& modelPath)
+    {
+        std::error_code ec{};
+        std::filesystem::create_directories(modelPath.parent_path(), ec);
+
+        std::ofstream ofs(modelPath, std::ios::binary | std::ios::trunc);
+        if (!ofs)
+            return false;
+
+        const char magic[5] = { 'P','X','A','I','1' };
+        ofs.write(magic, sizeof(magic));
+
+        std::uint32_t count = 0;
+        ofs.write(reinterpret_cast<const char*>(&count), sizeof(count));
+
+        std::int32_t width = kDefaultPatchSize;
+        std::int32_t height = kDefaultPatchSize;
+        ofs.write(reinterpret_cast<const char*>(&width), sizeof(width));
+        ofs.write(reinterpret_cast<const char*>(&height), sizeof(height));
+
+        return ofs.good();
     }
 
     std::optional<std::filesystem::path> CreateModelBackup(const std::filesystem::path& modelPath)
@@ -1047,6 +1091,11 @@ namespace
                 hwnd, (HMENU)IDC_STATUS,
                 nullptr, nullptr);
 
+            if (!EnsureSettingsFile())
+            {
+                SetStatus(L"Failed to create default settings file.");
+            }
+
             LoadCaptureHistory();
             UpdateHistoryLabel();
             if (!g_history.empty())
@@ -1057,6 +1106,18 @@ namespace
             }
 
             auto modelPath = GetModelPath();
+            if (!std::filesystem::exists(modelPath))
+            {
+                if (CreatePlaceholderModelFile(modelPath))
+                {
+                    SetStatus(L"Model file missing; created placeholder.");
+                }
+                else
+                {
+                    SetStatus(L"Model file missing and could not be created.");
+                }
+            }
+
             if (!g_ai.load_from_file(modelPath.string()))
             {
                 SetStatus(L"Failed to load model.");
