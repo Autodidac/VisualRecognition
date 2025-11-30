@@ -46,6 +46,7 @@ namespace
         int width{};
         int height{};
         std::chrono::system_clock::time_point timestamp{};
+        std::optional<std::filesystem::path> filePath;
     };
 
     std::vector<Capture> g_history;
@@ -166,7 +167,7 @@ namespace
         }
     }
 
-    bool SaveCaptureToDisk(const Capture& cap)
+    std::optional<std::filesystem::path> SaveCaptureToDisk(const Capture& cap)
     {
         auto dir = GetHistoryDir();
         std::error_code ec{};
@@ -184,7 +185,7 @@ namespace
 
         std::ofstream ofs(file, std::ios::binary | std::ios::trunc);
         if (!ofs)
-            return false;
+            return std::nullopt;
 
         std::int32_t w = cap.width;
         std::int32_t h = cap.height;
@@ -197,7 +198,10 @@ namespace
         ofs.write(reinterpret_cast<const char*>(&count), sizeof(count));
         ofs.write(reinterpret_cast<const char*>(cap.pixels.data()), static_cast<std::streamsize>(count * sizeof(std::uint32_t)));
 
-        return ofs.good();
+        if (!ofs.good())
+            return std::nullopt;
+
+        return file;
     }
 
     std::optional<Capture> LoadCaptureFromDisk(const std::filesystem::path& path)
@@ -234,6 +238,7 @@ namespace
         cap.height = h;
         cap.timestamp = std::chrono::system_clock::time_point{ std::chrono::milliseconds{ t } };
         cap.pixels = std::move(pixels);
+        cap.filePath = path;
         return cap;
     }
 
@@ -729,6 +734,9 @@ namespace
         ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_NEXT), x, y, btnW, btnH, TRUE);
         x += btnW + spacing;
 
+        ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_DELETE), x, y, btnW, btnH, TRUE);
+        x += btnW + spacing;
+
         ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_EXIT), x, y, btnW, btnH, TRUE);
 
         int infoY = y + btnH + spacing;
@@ -828,9 +836,10 @@ namespace
         {
             g_history.push_back(std::move(*cap));
             g_selectedIndex = static_cast<int>(g_history.size() - 1);
-            bool saved = SaveCaptureToDisk(g_history.back());
+            auto savedPath = SaveCaptureToDisk(g_history.back());
+            g_history.back().filePath = savedPath;
             UpdateHistoryLabel();
-            if (saved)
+            if (savedPath)
                 SetStatus(L"Captured patch (click).");
             else
                 SetStatus(L"Captured, but failed to save history entry.");
@@ -914,6 +923,45 @@ namespace
         SetStatus(L"Selected next capture.");
     }
 
+    void DeleteSelectedCapture()
+    {
+        if (g_history.empty() || g_selectedIndex < 0 || g_selectedIndex >= static_cast<int>(g_history.size()))
+        {
+            SetStatus(L"No capture selected to delete.");
+            return;
+        }
+
+        auto removedIndex = g_selectedIndex;
+        auto removed = std::move(g_history[static_cast<std::size_t>(removedIndex)]);
+
+        bool removedFromDisk = true;
+        if (removed.filePath)
+        {
+            std::error_code ec{};
+            removedFromDisk = std::filesystem::remove(*removed.filePath, ec) || !std::filesystem::exists(*removed.filePath);
+        }
+
+        g_history.erase(g_history.begin() + removedIndex);
+
+        if (g_history.empty())
+        {
+            g_selectedIndex = -1;
+            UpdateHistoryLabel();
+            if (g_preview)
+                ::InvalidateRect(g_preview, nullptr, TRUE);
+
+            SetStatus(removedFromDisk ? L"Deleted capture; history is now empty." : L"Deleted capture, but failed to remove file.");
+            return;
+        }
+
+        g_selectedIndex = std::min(removedIndex, static_cast<int>(g_history.size() - 1));
+        UpdateHistoryLabel();
+        if (g_preview)
+            ::InvalidateRect(g_preview, nullptr, TRUE);
+
+        SetStatus(removedFromDisk ? L"Deleted capture." : L"Deleted capture, but failed to remove file from disk.");
+    }
+
     // -------------------------------------------------------------------------
     // Main window proc
     // -------------------------------------------------------------------------
@@ -959,6 +1007,12 @@ namespace
                 WS_VISIBLE | WS_CHILD,
                 0, 0, 0, 0,
                 hwnd, (HMENU)IDC_BTN_NEXT,
+                nullptr, nullptr);
+
+            ::CreateWindowW(L"BUTTON", L"Delete Capture",
+                WS_VISIBLE | WS_CHILD,
+                0, 0, 0, 0,
+                hwnd, (HMENU)IDC_BTN_DELETE,
                 nullptr, nullptr);
 
             ::CreateWindowW(L"BUTTON", L"Exit",
@@ -1074,6 +1128,10 @@ namespace
 
             case IDC_BTN_NEXT:
                 SelectNextCapture();
+                break;
+
+            case IDC_BTN_DELETE:
+                DeleteSelectedCapture();
                 break;
 
             case IDC_BTN_LEARN:

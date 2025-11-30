@@ -7,6 +7,7 @@ enum : int {
     IDC_BTN_PREV,
     IDC_BTN_NEXT,
     IDC_BTN_PROMPT,
+    IDC_BTN_DELETE,
     IDC_BTN_EXIT,
     IDC_STATUS,
     IDC_PREVIEW,

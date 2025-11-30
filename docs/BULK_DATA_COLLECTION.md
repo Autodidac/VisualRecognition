@@ -8,6 +8,7 @@ This guide outlines a recommended flow for gathering and organizing cursor-cente
   - **Left click** (global hook): capture a patch anywhere, even if the app is unfocused.
   - **Capture** button (UI): capture while the window is focused.
 - Verify the preview to confirm the patch includes the desired context (padding near edges is handled automatically).
+- Use **Delete Capture** to remove accidental or redundant entries; the matching `.bin` file in the history folder is removed when present.
 
 ## Organizing stored captures
 - Captures are kept in memory during the session; plan short capture batches to avoid losing context.

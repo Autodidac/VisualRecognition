@@ -7,6 +7,7 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
 - Patch preview with simple status messaging.
 - Captures stay centered on the cursor with padding near screen edges, keeping previews and training sizes consistent.
 - One-click learning: add a labeled patch, persist it to `pixelai_examples.bin`, and keep timestamped backups beside the model file according to the `BackupRetention` setting in `pixelai.ini`.
+- Delete captures directly from the history list, removing the on-disk `.bin` entry when present.
 - Lightweight cosine-similarity recognizer implemented in C++20 modules.
 
 ## Build
@@ -20,6 +21,7 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
   - **Left click**: capture a patch around the cursor.
   - **F5**: classify the most recent capture globally (even when the app is not focused).
 - **Learn Label**: prompt for a label, persist the model to `pixelai_examples.bin` in the working directory, and write timestamped backups next to it as governed by `BackupRetention` in `pixelai.ini`.
+- **Delete Capture**: remove the selected history entry and delete the corresponding `.bin` file if it exists.
 - Classification status messages show scores with three-decimal precision for easier comparison between runs.
 - Follow the [bulk data collection guide](docs/BULK_DATA_COLLECTION.md) for recommended steps to capture, organize, label, and save patches for training.
 
