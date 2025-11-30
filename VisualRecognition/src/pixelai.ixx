@@ -174,6 +174,16 @@ export namespace almond::pixelai
             if (!ifs)
                 return false;
 
+            if (patch_width_ <= 0 || patch_height_ <= 0)
+                return false;
+
+            const size_t expected_feat_count = static_cast<size_t>(patch_width_)
+                                              * static_cast<size_t>(patch_height_)
+                                              * 3u;
+            if (expected_feat_count == 0
+                || expected_feat_count > static_cast<size_t>(std::numeric_limits<std::uint32_t>::max()))
+                return false;
+
             vector<LabeledPatch> tmp;
             tmp.reserve(count);
 
@@ -195,10 +205,13 @@ export namespace almond::pixelai
                 if (!ifs)
                     return false;
 
+                if (static_cast<size_t>(feat_count) != expected_feat_count)
+                    return false;
+
                 Patch p;
                 p.width  = patch_width_;
                 p.height = patch_height_;
-                p.features.resize(feat_count);
+                p.features.resize(expected_feat_count);
 
                 ifs.read(reinterpret_cast<char*>(p.features.data()),
                          static_cast<std::streamsize>(feat_count * sizeof(float)));
