@@ -10,6 +10,7 @@ module;
 #include <chrono>
 #include <optional>
 #include <string>
+#include <atomic>
 #include <charconv>
 #include <algorithm>
 #include <cctype>
@@ -258,20 +259,29 @@ namespace ui::detail
         auto dir = GetCaptureDirectory();
 
         // FIX: fully qualified chrono
-        auto ts = std::chrono::system_clock::to_time_t(cap.timestamp);
+        static std::atomic_uint32_t s_captureCounter{0};
+
+        const auto timePoint = cap.timestamp;
+        const auto ts        = std::chrono::system_clock::to_time_t(
+            std::chrono::floor<std::chrono::seconds>(timePoint));
+        const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(
+            timePoint.time_since_epoch()) % 1000;
+        const auto sequence = s_captureCounter.fetch_add(1, std::memory_order_relaxed);
 
         std::tm tm{};
         localtime_s(&tm, &ts);
 
         wchar_t name[256]{};
         swprintf(name, 256,
-            L"cap_%04d%02d%02d_%02d%02d%02d.bmp",
+            L"cap_%04d%02d%02d_%02d%02d%02d_%03lld_%06u.bmp",
             tm.tm_year + 1900,
             tm.tm_mon + 1,
             tm.tm_mday,
             tm.tm_hour,
             tm.tm_min,
-            tm.tm_sec);
+            tm.tm_sec,
+            static_cast<long long>(millis.count()),
+            sequence);
 
         std::filesystem::path path = dir / name;
 
