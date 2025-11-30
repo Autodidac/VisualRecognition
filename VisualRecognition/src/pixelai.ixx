@@ -180,12 +180,23 @@
 
                 vector<Patch> tmp;
 
+                constexpr std::uint32_t kMaxDim         = 4096;
+                constexpr std::size_t   kMaxPixels      = static_cast<std::size_t>(kMaxDim) * kMaxDim;
+                constexpr std::size_t   kMaxLabelLength = 1024;
+
                 std::uint32_t count{};
                 ifs.read(reinterpret_cast<char*>(&count), sizeof(count));
                 if (!ifs) return false;
 
                 for (std::uint32_t i = 0; i < count; ++i)
                 {
+                    const auto fail = [i](std::string_view reason) -> bool
+                    {
+                        std::cerr << "pixelai: rejecting model record "
+                                  << i << ": " << reason << '\n';
+                        return false;
+                    };
+
                     std::uint32_t w{}, h{}, n{}, ls{};
                     ifs.read(reinterpret_cast<char*>(&w),  sizeof(w));
                     ifs.read(reinterpret_cast<char*>(&h),  sizeof(h));
@@ -193,14 +204,44 @@
                     ifs.read(reinterpret_cast<char*>(&ls), sizeof(ls));
                     if (!ifs) return false;
 
+                    if (w == 0 || h == 0)
+                        return fail("zero dimension");
+
+                    if (w > kMaxDim || h > kMaxDim)
+                        return fail("dimension exceeds limit");
+
+                    const std::uint64_t expected_pixels64 =
+                        static_cast<std::uint64_t>(w) * static_cast<std::uint64_t>(h);
+
+                    if (expected_pixels64 > std::numeric_limits<std::size_t>::max())
+                        return fail("pixel count overflow");
+
+                    const std::size_t expected_pixels = static_cast<std::size_t>(expected_pixels64);
+
+                    if (expected_pixels > kMaxPixels)
+                        return fail("pixel count exceeds limit");
+
+                    if (static_cast<std::size_t>(n) != expected_pixels)
+                        return fail("pixel count mismatch");
+
+                    if (expected_pixels >
+                        (std::numeric_limits<std::size_t>::max() / sizeof(std::uint32_t)))
+                    {
+                        return fail("pixel byte size overflow");
+                    }
+
+                    if (static_cast<std::size_t>(ls) > kMaxLabelLength)
+                        return fail("label too long");
+
                     Patch ex;
                     ex.width  = static_cast<int>(w);
                     ex.height = static_cast<int>(h);
-                    ex.pixels.resize(n);
-                    ex.label.resize(ls);
+                    ex.pixels.resize(expected_pixels);
+                    ex.label.resize(static_cast<std::size_t>(ls));
 
                     ifs.read(reinterpret_cast<char*>(ex.pixels.data()),
-                             static_cast<std::streamsize>(n * sizeof(std::uint32_t)));
+                             static_cast<std::streamsize>(
+                                 expected_pixels * sizeof(std::uint32_t)));
                     ifs.read(ex.label.data(),
                              static_cast<std::streamsize>(ls));
 

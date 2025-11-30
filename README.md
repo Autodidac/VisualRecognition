@@ -26,6 +26,10 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
 - Classification status messages show scores with three-decimal precision for easier comparison between runs.
 - Follow the [bulk data collection guide](docs/BULK_DATA_COLLECTION.md) for recommended steps to capture, organize, label, and save patches for training.
 
+### Model file validation
+- The loader rejects corrupt or oversized `pixelai_examples.bin` files: dimensions must fit within reasonable bounds, label text is capped, and the pixel count must match the expected width × height.
+- If a model fails to load, remove the damaged file (or restore from a timestamped backup) and retrain from known-good captures.
+
 ## Project Layout
 - `VisualRecognition/src/ui.ixx`: Win32 UI, capture logic, and interaction with the recognizer.
 - `VisualRecognition/src/pixelai.ixx`: Example-based pixel recognizer and model persistence.
