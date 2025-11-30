@@ -8,11 +8,11 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
 - Captures stay centered on the cursor with padding near screen edges, keeping previews and training sizes consistent.
 - One-click learning: add a labeled patch, persist it to `pixelai_examples.bin`, and keep timestamped backups beside the model file according to the `BackupRetention` setting in `pixelai.ini`.
 - Delete captures directly from the history list, removing the on-disk `.bin` entry when present.
-- Lightweight cosine-similarity recognizer implemented in C++20 modules.
+- Lightweight cosine-similarity recognizer implemented in C++23 modules.
 
 ## Build
-1. Open `VisualRecognition.slnx` in Visual Studio 2022 (preview solution format) on Windows.
-2. Ensure the MSVC toolchain supports C++20 modules.
+1. Open `VisualRecognition.slnx` in Visual Studio 2026 (preview solution format) on Windows.
+2. Ensure the MSVC toolchain supports C++23 modules.
 3. Build the `VisualRecognition` project; the entry point is `VisualRecognition/src/main.cpp`, which imports the `ui` module.
 
 ## Run
