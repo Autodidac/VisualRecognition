@@ -5,6 +5,7 @@
 - Global mouse hook triggers capture (left click) and classification (right click) even when the app is unfocused.
 - The `PixelRecognizer` (`src/pixelai.ixx`) stores labeled patches, performs cosine-similarity matching, and saves/loads models to `pixelai_examples.bin`.
 - Learning flow prompts for a label, trains in-memory, and attempts to persist the model immediately.
+- Timestamped backups of `pixelai_examples.bin` are written alongside the model file and trimmed according to the `BackupRetention` setting in `pixelai.ini`.
 
 ## Immediate Opportunities
 1. **Model Lifecycle**: load `pixelai_examples.bin` on startup and surface errors in the status bar; prompt before overwriting.

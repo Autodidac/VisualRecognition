@@ -293,6 +293,14 @@ namespace
             ::SetWindowTextW(g_status, text.data());
     }
 
+    std::wstring FormatBackupPath(const std::filesystem::path& path)
+    {
+        std::error_code ec{};
+        auto absolutePath = std::filesystem::absolute(path, ec);
+        const auto& displayPath = ec ? path : absolutePath;
+        return displayPath.wstring();
+    }
+
     const Capture* CurrentCapture()
     {
         if (g_selectedIndex < 0 || g_selectedIndex >= static_cast<int>(g_history.size()))
@@ -1091,7 +1099,7 @@ namespace
                         if (backupPath)
                         {
                             saveStatus += L" (backup: ";
-                            saveStatus += backupPath->filename().wstring();
+                            saveStatus += FormatBackupPath(*backupPath);
                             saveStatus += L")";
                         }
                         SetStatus(saveStatus);
