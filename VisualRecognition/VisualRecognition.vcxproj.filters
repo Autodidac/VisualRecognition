@@ -21,6 +21,21 @@
     <ClCompile Include="src\pixelai.ixx">
       <Filter>Header Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui.capture.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui.common.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui.filesystem.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui.hooks.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui.layout.ixx">
+      <Filter>Header Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui.ixx">
       <Filter>Header Files</Filter>
     </ClCompile>
