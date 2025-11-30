@@ -66,31 +66,50 @@ namespace ui::detail
         int y;
     };
 
-    constexpr CaptureBounds ComputeBounds(CursorPoint pt, int virtualLeft, int virtualTop, int virtualWidth, int virtualHeight)
+    struct VirtualScreen
+    {
+        int left;
+        int top;
+        int right;   // inclusive
+        int bottom;  // inclusive
+
+        [[nodiscard]] constexpr int width() const { return right - left + 1; }
+        [[nodiscard]] constexpr int height() const { return bottom - top + 1; }
+    };
+
+    constexpr VirtualScreen MakeVirtualScreen(int left, int top, int width, int height)
+    {
+        return VirtualScreen
+        {
+            left,
+            top,
+            left + width - 1,
+            top + height - 1,
+        };
+    }
+
+    constexpr CaptureBounds ComputeBounds(CursorPoint pt, const VirtualScreen& virtualScreen)
     {
         const int desiredLeft = pt.x - halfWidth;
         const int desiredTop = pt.y - headOffsetY;
         const int desiredRight = desiredLeft + captureWidth - 1;
         const int desiredBottom = desiredTop + captureHeight - 1;
 
-        const int virtualRight = virtualLeft + virtualWidth - 1;
-        const int virtualBottom = virtualTop + virtualHeight - 1;
-
         CaptureBounds bounds{};
         bounds.desiredLeft = desiredLeft;
         bounds.desiredTop = desiredTop;
-        bounds.left = std::clamp(desiredLeft, virtualLeft, virtualRight);
-        bounds.top = std::clamp(desiredTop, virtualTop, virtualBottom);
-        bounds.right = std::clamp(desiredRight, virtualLeft, virtualRight);
-        bounds.bottom = std::clamp(desiredBottom, virtualTop, virtualBottom);
+        bounds.left = std::clamp(desiredLeft, virtualScreen.left, virtualScreen.right);
+        bounds.top = std::clamp(desiredTop, virtualScreen.top, virtualScreen.bottom);
+        bounds.right = std::clamp(desiredRight, virtualScreen.left, virtualScreen.right);
+        bounds.bottom = std::clamp(desiredBottom, virtualScreen.top, virtualScreen.bottom);
 
         return bounds;
     }
 
     // Coverage for multi-monitor coordinates that cross the primary origin.
-    static_assert(ComputeBounds({ -10, 500 }, -1920, 0, 3840, 1080).left == -190);
-    static_assert(ComputeBounds({ -10, 500 }, -1920, 0, 3840, 1080).width() == captureWidth);
-    static_assert(ComputeBounds({ -1910, 500 }, -1920, 0, 3840, 1080).left == -1920);
+    static_assert(ComputeBounds({ -10, 500 }, MakeVirtualScreen(-1920, 0, 3840, 1080)).left == -190);
+    static_assert(ComputeBounds({ -10, 500 }, MakeVirtualScreen(-1920, 0, 3840, 1080)).width() == captureWidth);
+    static_assert(ComputeBounds({ -1910, 500 }, MakeVirtualScreen(-1920, 0, 3840, 1080)).left == -1920);
 
     std::optional<Capture> CapturePatchAroundCursor()
     {
@@ -103,7 +122,13 @@ namespace ui::detail
         const int virtualWidth = ::GetSystemMetrics(SM_CXVIRTUALSCREEN);
         const int virtualHeight = ::GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-        const auto bounds = ComputeBounds({ pt.x, pt.y }, virtualLeft, virtualTop, virtualWidth, virtualHeight);
+        const VirtualScreen virtualScreen = MakeVirtualScreen(
+            virtualLeft,
+            virtualTop,
+            virtualWidth,
+            virtualHeight);
+
+        const auto bounds = ComputeBounds({ pt.x, pt.y }, virtualScreen);
         const int w = bounds.width();
         const int h = bounds.height();
 
