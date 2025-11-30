@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.5
+- Corrected README to reflect the current capture format (360×960 portrait frames saved to `captures/`), the macro hotkeys (**F6**–**F9**), and the lack of a global F5 classification hook.
+
 ## 0.1.4
 - Reorganized the UI layout with a top-aligned status bar, wider spacing, and a dedicated Clear preview control for quickly resetting the workspace.
 - Added stronger capture/delete guards to avoid accidental captures when clicking UI controls and to surface history counts in status messages.

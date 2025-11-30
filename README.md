@@ -1,11 +1,11 @@
 # VisualRecognition
 
-VisualRecognition is a Windows desktop utility that captures small pixel patches around the mouse cursor and classifies them using an in-memory example-based model. The tool is geared toward rapid experimentation with visual snippets: capture a region, label it, and immediately reuse it for recognition.
+VisualRecognition is a Windows desktop utility that records portrait-sized screen grabs anchored to the mouse cursor and classifies them using an in-memory example-based model. The tool is geared toward rapid experimentation with visual snippets: capture a frame, label it, and immediately reuse it for recognition.
 
 ## Features
-- Global hooks for quick actions (left-click to capture anywhere, F5 to classify) even when the window is not focused, plus a macro bar (Record, Clear, Play, Repeat, Exit) that rides on the same hooks to control automation without refocusing the app.
+- Global hooks for quick actions: left-click to capture anywhere outside the UI, and low-level hotkeys (**F7** record, **F8** clear, **F9** play/stop, **F6** exit) to drive the macro engine even when the app is unfocused.
 - Patch preview with simple status messaging and a live mouse-coordinate indicator so you can see exactly where captures and macro mouse events will land.
-- Captures stay centered on the cursor with padding near screen edges, keeping previews and training sizes consistent.
+- Portrait captures: a fixed 360×960 BGRA32 frame with the cursor ~12% from the top. Pixels are clamped at screen edges so every capture stays full-sized.
 - One-click learning: add a labeled patch, persist it to `pixelai_examples.bin`, and keep timestamped backups beside the model file according to the `BackupRetention` setting in `pixelai.ini`.
 - Delete captures directly from the history list, removing the on-disk `.bin` entry when present.
 - Reset the UI instantly with **Clear preview**, which wipes the on-screen image, clears capture history, and cleans up any saved capture files.
@@ -19,13 +19,12 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
 ## Run
 - Launch the built executable on Windows.
 - Use the buttons in the UI or hooks:
-  - **Left click**: capture a patch around the cursor.
-  - **F5**: classify the most recent capture globally (even when the app is not focused).
+  - **Left click** (outside the window): capture a patch around the cursor and store a BMP in `captures/` under the app directory.
   - **Macro bar**: Record and Clear manage the captured macro, Play starts/stops playback, Repeat loops playback, and Exit stops playback and closes the app. These buttons mirror the global hotkeys **F7** (Record), **F8** (Clear), **F9** (Play), and **F6** (Exit) so you can drive macros while another window is active. Recording uses the global keyboard/mouse hooks, so captured events include clicks and keys from outside the app.
-- **Learn Label**: prompt for a label, persist the model to `pixelai_examples.bin` in the working directory, and write timestamped backups next to it as governed by `BackupRetention` in `pixelai.ini`.
-- **Delete Capture**: remove the selected history entry and delete the corresponding `.bin` file if it exists.
+- **Learn Label**: prompt for a label, persist the model to `pixelai_examples.bin` in the app directory, and write timestamped backups next to it as governed by `BackupRetention` in `pixelai.ini`.
+- **Classify**: run recognition on the selected capture from the UI (no global F5 shortcut). Status messages show scores with three-decimal precision for easier comparison between runs.
+- **Delete Capture**: remove the selected history entry and delete the corresponding capture file if it exists.
 - **Clear preview**: clear the preview pane, capture history, and any saved capture files from the current session.
-- Classification status messages show scores with three-decimal precision for easier comparison between runs.
 - Follow the [bulk data collection guide](docs/BULK_DATA_COLLECTION.md) for recommended steps to capture, organize, label, and save patches for training.
 
 ### Model file validation
