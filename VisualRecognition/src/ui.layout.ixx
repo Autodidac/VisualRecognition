@@ -531,6 +531,8 @@
             case WM_CREATE:
                 g_mainWindow = hwnd;
                 CreateChildControls(hwnd);
+                LayoutControls(hwnd);
+                UpdateMouseCoordsLabel(hwnd);
                 ::SetTimer(hwnd, 1, 100, nullptr); // mouse coord refresh
                 return 0;
 
