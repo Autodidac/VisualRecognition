@@ -155,7 +155,7 @@ namespace
     void DoClassify();
 
     // -------------------------------------------------------------------------
-    // GLOBAL MOUSE HOOK — captures anywhere even when app is not focused
+    // GLOBAL MOUSE HOOK â€” captures anywhere even when app is not focused
     // -------------------------------------------------------------------------
     LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam)
     {
@@ -538,7 +538,14 @@ namespace
                 hwnd, (HMENU)IDC_STATUS,
                 nullptr, nullptr);
 
-            (void)g_ai.load_from_file(kModelFile);
+            if (!g_ai.load_from_file(kModelFile))
+            {
+                SetStatus(L"Failed to load model.");
+                ::MessageBoxW(hwnd,
+                    L"Could not load the model file. Classification will be unavailable.",
+                    L"Model Load Failed",
+                    MB_OK | MB_ICONERROR);
+            }
 
             // Global low-level mouse hook
             g_mouseHook = ::SetWindowsHookExW(
@@ -547,6 +554,15 @@ namespace
                 ::GetModuleHandleW(nullptr),
                 0
             );
+
+            if (!g_mouseHook)
+            {
+                SetStatus(L"Global mouse hook inactive.");
+                ::MessageBoxW(hwnd,
+                    L"Global mouse hook could not be installed. Capture and classify via mouse clicks will not work.",
+                    L"Hook Installation Failed",
+                    MB_OK | MB_ICONERROR);
+            }
 
             break;
         }
