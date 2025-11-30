@@ -1,7 +1,7 @@
 module;
 #define NOMINMAX
 #include <windows.h>
-#include "interface_ids.hpp"
+#include "ids.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -15,18 +15,18 @@ module;
 #include <string>
 #include <vector>
 
-export module interface.app:capture;
+export module ui:capture;
 
 import std;
-import vision.recognition_engine;
-import :state;
-import :storage;
-import automation.macro.types;
-import automation.macro.engine;
+import pixelai;
+import :common;
+import :filesystem;
+import vr.macro.types;
+import vr.macro.core;
 
 namespace ui::detail
 {
-    using vision::PatchRecognizer;
+    using pixelai::PixelRecognizer;
 
     // -----------------------------------------------------------------
     // FULL-BODY CAPTURE (mouse = head anchor)

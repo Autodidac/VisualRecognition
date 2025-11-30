@@ -14,7 +14,7 @@ This guide summarizes how the app runs so you can trace code paths quickly when 
 
 ## Classification flow
 - **Global keyboard hook**: A low-level keyboard hook listens for `F5` and invokes `DoClassify()` even when the app is unfocused. The Classify button reuses the same function.
-- **Scoring**: Classification runs cosine similarity over the normalized RGB feature vectors stored in memory, returning the best label when the score meets the configured confidence threshold (`PatchRecognizer::min_confidence`, default 0.85).
+- **Scoring**: Classification runs cosine similarity over the normalized RGB feature vectors stored in memory, returning the best label when the score meets the configured confidence threshold (`PixelRecognizer::min_confidence`, default 0.85).
 
 ## Model training, saving, and backups
 - **Learning**: The "Learn Label" button prompts for a label, adds the current capture as an example, and prepares to save `pixelai_examples.bin` in the executable directory.
@@ -26,5 +26,5 @@ This guide summarizes how the app runs so you can trace code paths quickly when 
 - Keys: Under `[Saving]`, `BackupRetention` controls how many timestamped backups to keep (0 disables cleanup). Add more keys here as new features require them.
 
 ## Quick pointers to source
-- **UI and hooks**: `VisualRecognition/src/interface_app.ixx` and its partitions (`interface_layout.ixx`, `interface_capture.ixx`, `interface_mouse_hooks.ixx`, `interface_storage.ixx`, `interface_state.ixx`). These cover input hooks, capture/classify flows, and runtime settings/helpers.
-- **Recognizer**: `VisualRecognition/src/vision_recognition_engine.ixx` (feature extraction, cosine similarity, load/save format).
+- **UI and hooks**: `VisualRecognition/src/ui.ixx` (`MouseHookProc`, `KeyboardHookProc`, `DoCapture`, `DoClassify`, `LoadCaptureHistory`, settings helpers).
+- **Recognizer**: `VisualRecognition/src/pixelai.ixx` (feature extraction, cosine similarity, load/save format).
