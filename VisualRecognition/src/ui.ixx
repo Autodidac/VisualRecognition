@@ -89,17 +89,27 @@ namespace
         const LONG bottom = vy + vh - 1;
 
         const LONG r = static_cast<LONG>(kCaptureRadius);
+        const int  targetW = static_cast<int>(r * 2 + 1);
+        const int  targetH = static_cast<int>(r * 2 + 1);
 
-        LONG x0 = std::clamp(pt.x - r, left, right);
-        LONG y0 = std::clamp(pt.y - r, top, bottom);
-        LONG x1 = std::clamp(pt.x + r, left, right);
-        LONG y1 = std::clamp(pt.y + r, top, bottom);
+        const LONG desiredX0 = pt.x - r;
+        const LONG desiredY0 = pt.y - r;
+        const LONG desiredX1 = pt.x + r;
+        const LONG desiredY1 = pt.y + r;
+
+        LONG x0 = std::clamp(desiredX0, left, right);
+        LONG y0 = std::clamp(desiredY0, top, bottom);
+        LONG x1 = std::clamp(desiredX1, left, right);
+        LONG y1 = std::clamp(desiredY1, top, bottom);
 
         int w = static_cast<int>(x1 - x0 + 1);
         int h = static_cast<int>(y1 - y0 + 1);
 
         if (w <= 0 || h <= 0)
             return false;
+
+        int offsetX = static_cast<int>(x0 - desiredX0);
+        int offsetY = static_cast<int>(y0 - desiredY0);
 
         HDC hdcScreen = ::GetDC(nullptr);
         if (!hdcScreen)
@@ -136,16 +146,27 @@ namespace
         ::DeleteDC(hdcMem);
         ::ReleaseDC(nullptr, hdcScreen);
 
-        std::vector<std::uint32_t> pixels;
-        pixels.resize(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
-        std::memcpy(pixels.data(), bits, pixels.size() * sizeof(std::uint32_t));
+        std::vector<std::uint32_t> captured;
+        captured.resize(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
+        std::memcpy(captured.data(), bits, captured.size() * sizeof(std::uint32_t));
 
         ::DeleteObject(hbm);
 
+        std::vector<std::uint32_t> padded;
+        padded.resize(static_cast<std::size_t>(targetW) * static_cast<std::size_t>(targetH), 0u);
+
+        for (int row = 0; row < h; ++row)
+        {
+            const auto* src = captured.data() + static_cast<std::size_t>(row) * static_cast<std::size_t>(w);
+            auto* dst = padded.data() + static_cast<std::size_t>(row + offsetY) * static_cast<std::size_t>(targetW)
+                + static_cast<std::size_t>(offsetX);
+            std::memcpy(dst, src, static_cast<std::size_t>(w) * sizeof(std::uint32_t));
+        }
+
         g_lastCapture = Capture{
-            .pixels = std::move(pixels),
-            .width = w,
-            .height = h
+            .pixels = std::move(padded),
+            .width = targetW,
+            .height = targetH
         };
 
         return true;
