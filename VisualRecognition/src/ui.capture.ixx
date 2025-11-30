@@ -9,6 +9,7 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <iomanip>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -310,7 +311,7 @@ namespace ui::detail
         ss << L"Classified as '"
             << std::wstring(label.begin(), label.end())
             << L"' (confidence "
-            << static_cast<int>(confidence * 100.0f)
+            << std::fixed << std::setprecision(3) << (confidence * 100.0f)
             << L"%)";
 
         SetStatus(ss.str());
