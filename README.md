@@ -11,7 +11,7 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
 - Lightweight cosine-similarity recognizer implemented in C++23 modules.
 
 ## Build
-1. Open `VisualRecognition.slnx` in Visual Studio 2026 (preview solution format) on Windows.
+1. Open `VisualRecognition.sln` in Visual Studio 2026 (MSVC v146 toolset) on Windows.
 2. Ensure the MSVC toolchain supports C++23 modules.
 3. Build the `VisualRecognition` project; the entry point is `VisualRecognition/src/main.cpp`, which imports the `ui` module.
 
