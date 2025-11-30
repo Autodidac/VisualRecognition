@@ -155,34 +155,59 @@ export namespace almond::pixelai
 
         [[nodiscard]] bool load_from_file(const std::string& path)
         {
+            auto reset_state = [this]()
+            {
+                clear();
+            };
+
             std::ifstream ifs(path, std::ios::binary);
             if (!ifs)
+            {
+                reset_state();
                 return false;
+            }
 
             char magic[5]{};
             ifs.read(magic, sizeof(magic));
             if (!ifs || magic[0] != 'P' || magic[1] != 'X' || magic[2] != 'A' || magic[3] != 'I')
+            {
+                reset_state();
                 return false;
+            }
 
             std::uint32_t count{};
             ifs.read(reinterpret_cast<char*>(&count), sizeof(count));
             if (!ifs)
+            {
+                reset_state();
                 return false;
+            }
 
-            ifs.read(reinterpret_cast<char*>(&patch_width_), sizeof(patch_width_));
-            ifs.read(reinterpret_cast<char*>(&patch_height_), sizeof(patch_height_));
+            int file_patch_width{};
+            int file_patch_height{};
+            ifs.read(reinterpret_cast<char*>(&file_patch_width), sizeof(file_patch_width));
+            ifs.read(reinterpret_cast<char*>(&file_patch_height), sizeof(file_patch_height));
             if (!ifs)
+            {
+                reset_state();
                 return false;
+            }
 
-            if (patch_width_ <= 0 || patch_height_ <= 0)
+            if (file_patch_width <= 0 || file_patch_height <= 0)
+            {
+                reset_state();
                 return false;
+            }
 
-            const size_t expected_feat_count = static_cast<size_t>(patch_width_)
-                                              * static_cast<size_t>(patch_height_)
+            const size_t expected_feat_count = static_cast<size_t>(file_patch_width)
+                                              * static_cast<size_t>(file_patch_height)
                                               * 3u;
             if (expected_feat_count == 0
                 || expected_feat_count > static_cast<size_t>(std::numeric_limits<std::uint32_t>::max()))
+            {
+                reset_state();
                 return false;
+            }
 
             vector<LabeledPatch> tmp;
             tmp.reserve(count);
@@ -192,31 +217,46 @@ export namespace almond::pixelai
                 std::uint32_t label_len{};
                 ifs.read(reinterpret_cast<char*>(&label_len), sizeof(label_len));
                 if (!ifs)
+                {
+                    reset_state();
                     return false;
+                }
 
                 string label;
                 label.resize(label_len);
                 ifs.read(label.data(), static_cast<std::streamsize>(label_len));
                 if (!ifs)
+                {
+                    reset_state();
                     return false;
+                }
 
                 std::uint32_t feat_count{};
                 ifs.read(reinterpret_cast<char*>(&feat_count), sizeof(feat_count));
                 if (!ifs)
+                {
+                    reset_state();
                     return false;
+                }
 
                 if (static_cast<size_t>(feat_count) != expected_feat_count)
+                {
+                    reset_state();
                     return false;
+                }
 
                 Patch p;
-                p.width  = patch_width_;
-                p.height = patch_height_;
+                p.width  = file_patch_width;
+                p.height = file_patch_height;
                 p.features.resize(expected_feat_count);
 
                 ifs.read(reinterpret_cast<char*>(p.features.data()),
                          static_cast<std::streamsize>(feat_count * sizeof(float)));
                 if (!ifs)
+                {
+                    reset_state();
                     return false;
+                }
 
                 tmp.push_back(LabeledPatch{
                     .label = std::move(label),
@@ -224,6 +264,8 @@ export namespace almond::pixelai
                 });
             }
 
+            patch_width_ = file_patch_width;
+            patch_height_ = file_patch_height;
             examples_ = std::move(tmp);
             return true;
         }
