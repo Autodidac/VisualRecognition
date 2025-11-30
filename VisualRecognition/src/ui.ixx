@@ -25,6 +25,7 @@ namespace
 {
     constexpr int  kCaptureRadius = 240;
     constexpr char kModelFile[] = "pixelai_examples.bin";
+    constexpr int  kDefaultBackupRetention = 5;
 
     HWND g_status = nullptr;
     HWND g_preview = nullptr;
@@ -60,6 +61,104 @@ namespace
         std::filesystem::path dir(buffer);
         dir /= "pixelai_captures";
         return dir;
+    }
+
+    std::filesystem::path GetModelPath()
+    {
+        std::error_code ec{};
+        auto cwd = std::filesystem::current_path(ec);
+        if (ec)
+            return std::filesystem::path(kModelFile);
+
+        return cwd / kModelFile;
+    }
+
+    std::filesystem::path GetSettingsPath()
+    {
+        wchar_t buffer[MAX_PATH]{};
+        DWORD len = ::GetModuleFileNameW(nullptr, buffer, static_cast<DWORD>(std::size(buffer)));
+        if (len == 0 || len >= std::size(buffer))
+            return std::filesystem::path(L"pixelai.ini");
+
+        std::filesystem::path exePath(buffer);
+        return exePath.parent_path() / L"pixelai.ini";
+    }
+
+    int GetBackupRetention()
+    {
+        auto ini = GetSettingsPath();
+        if (std::filesystem::exists(ini))
+        {
+            int value = static_cast<int>(::GetPrivateProfileIntW(
+                L"Saving",
+                L"BackupRetention",
+                kDefaultBackupRetention,
+                ini.c_str()));
+            return std::max(0, value);
+        }
+
+        return kDefaultBackupRetention;
+    }
+
+    std::optional<std::filesystem::path> CreateModelBackup(const std::filesystem::path& modelPath)
+    {
+        if (!std::filesystem::exists(modelPath))
+            return std::nullopt;
+
+        std::error_code ec{};
+        std::filesystem::create_directories(modelPath.parent_path(), ec);
+
+        auto now = std::chrono::system_clock::now();
+        auto t = std::chrono::system_clock::to_time_t(now);
+        tm localTm{};
+        localtime_s(&localTm, &t);
+
+        wchar_t ts[32]{};
+        std::wcsftime(ts, std::size(ts), L"%Y%m%d_%H%M%S", &localTm);
+
+        auto backupName = modelPath.stem().wstring() + L"_" + ts + modelPath.extension().wstring();
+        auto backupPath = modelPath.parent_path() / backupName;
+
+        std::filesystem::copy_file(modelPath, backupPath, std::filesystem::copy_options::overwrite_existing, ec);
+        if (ec)
+            return std::nullopt;
+
+        return backupPath;
+    }
+
+    void EnforceBackupRetention(const std::filesystem::path& modelPath)
+    {
+        int retention = GetBackupRetention();
+        if (retention <= 0)
+            return;
+
+        std::vector<std::filesystem::directory_entry> backups;
+        std::error_code ec{};
+        for (auto& entry : std::filesystem::directory_iterator(modelPath.parent_path(), ec))
+        {
+            if (!entry.is_regular_file())
+                continue;
+
+            auto name = entry.path().filename().wstring();
+            if (name.starts_with(modelPath.stem().wstring() + L"_") && entry.path().extension() == modelPath.extension())
+                backups.push_back(entry);
+        }
+
+        std::sort(backups.begin(), backups.end(), [](const auto& a, const auto& b)
+            {
+                std::error_code aec{};
+                std::error_code bec{};
+                return a.last_write_time(aec) < b.last_write_time(bec);
+            });
+
+        if (backups.size() <= static_cast<std::size_t>(retention))
+            return;
+
+        auto toRemove = backups.size() - static_cast<std::size_t>(retention);
+        for (std::size_t i = 0; i < toRemove; ++i)
+        {
+            std::filesystem::remove(backups[i]);
+        }
     }
 
     bool SaveCaptureToDisk(const Capture& cap)
@@ -853,7 +952,8 @@ namespace
                     ::InvalidateRect(g_preview, nullptr, TRUE);
             }
 
-            if (!g_ai.load_from_file(kModelFile))
+            auto modelPath = GetModelPath();
+            if (!g_ai.load_from_file(modelPath.string()))
             {
                 SetStatus(L"Failed to load model.");
                 ::MessageBoxW(hwnd,
@@ -952,15 +1052,55 @@ namespace
 
                 std::string label = narrow_utf8(labelW);
 
+                auto modelPath = GetModelPath();
+                bool modelExists = std::filesystem::exists(modelPath);
+
+                if (modelExists)
+                {
+                    std::wstring prompt = L"An existing model file was found at:\n\n";
+                    prompt += modelPath.wstring();
+                    prompt += L"\n\nCreate a timestamped backup and overwrite it with the new training data?";
+
+                    int res = ::MessageBoxW(hwnd, prompt.c_str(), L"Confirm Save", MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2);
+                    if (res != IDYES)
+                    {
+                        SetStatus(L"Save cancelled; existing model preserved.");
+                        break;
+                    }
+                }
+
                 if (g_ai.add_example_bgra32(cap->pixels, cap->width, cap->height, label))
                 {
-                    if (g_ai.save_to_file(kModelFile))
+                    std::optional<std::filesystem::path> backupPath;
+                    if (modelExists)
                     {
-                        SetStatus(L"Example learned + saved.");
+                        backupPath = CreateModelBackup(modelPath);
+                        if (!backupPath)
+                        {
+                            SetStatus(L"Failed to create model backup; save aborted.");
+                            break;
+                        }
+
+                        EnforceBackupRetention(modelPath);
+                    }
+
+                    if (g_ai.save_to_file(modelPath.string()))
+                    {
+                        std::wstring saveStatus = L"Example learned + saved to ";
+                        saveStatus += modelPath.wstring();
+                        if (backupPath)
+                        {
+                            saveStatus += L" (backup: ";
+                            saveStatus += backupPath->filename().wstring();
+                            saveStatus += L")";
+                        }
+                        SetStatus(saveStatus);
                     }
                     else
                     {
-                        SetStatus(L"Learned, but failed to save model file.");
+                        std::wstring failStatus = L"Learned, but failed to save model file to ";
+                        failStatus += modelPath.wstring();
+                        SetStatus(failStatus);
                     }
                 }
                 else
