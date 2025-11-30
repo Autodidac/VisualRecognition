@@ -1,7 +1,7 @@
 module;
 #define NOMINMAX
 #include <windows.h>
-#include "ids.hpp"
+#include "interface_ids.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -18,14 +18,14 @@ module;
 #include <cwchar>
 #include <ctime>
 
-export module ui:filesystem;
+export module interface.app:storage;
 
-import :common;       // partition where kModelFileName lives
-import pixelai;
+import :state;       // partition where kModelFileName lives
+import vision.recognition_engine;
 
 namespace ui::detail
 {
-    using pixelai::PixelRecognizer;
+    using vision::PatchRecognizer;
 
     export std::filesystem::path GetAppDirectory()
     {
@@ -53,7 +53,7 @@ namespace ui::detail
         return GetAppDirectory() / ui::detail::kModelFileName;
     }
 
-    export bool LoadModel(PixelRecognizer& model)
+    export bool LoadModel(PatchRecognizer& model)
     {
         auto path = GetModelFilePath();
         if (!std::filesystem::exists(path))
@@ -226,7 +226,7 @@ namespace ui::detail
         }
     }
 
-    export bool SaveModel(const PixelRecognizer& model)
+    export bool SaveModel(const PatchRecognizer& model)
     {
         auto path = GetModelFilePath();
         if (!model.save_to_file(path.string()))

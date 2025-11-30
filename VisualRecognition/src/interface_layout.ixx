@@ -2,23 +2,21 @@ module;
 #define NOMINMAX
 #include <windows.h>
 
-#include "ids.hpp"
+#include "interface_ids.hpp"
 
 #include <algorithm>
 #include <string>
 #include <cstring>  // for std::memcpy
 
-export module ui:layout;
+export module interface.app:layout;
 
 import std;
-import pixelai;
-
-import :common;
+import :state;
 import :capture;
-import :filesystem;
-import vr.console_log;
-import vr.macro.core;
-import vr.macro.hooks;
+import :storage;
+import diagnostics.console_log;
+import automation.macro.engine;
+import automation.macro.hooks;
 
 using consolelog::WM_LOG_FLUSH;
 

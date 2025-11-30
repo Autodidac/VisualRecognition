@@ -1,9 +1,9 @@
 
-    export module pixelai;
+    export module vision.recognition_engine;
 
     import std;
 
-    export namespace pixelai
+    export namespace vision
     {
         using std::optional;
         using std::string;
@@ -23,10 +23,10 @@
         // This is intentionally minimal and deterministic; it is not meant to
         // be a deep model, just a compact incremental learner that can be
         // serialized to disk.
-        export class PixelRecognizer
+        export class PatchRecognizer
         {
         public:
-            PixelRecognizer() = default;
+            PatchRecognizer() = default;
 
             [[nodiscard]] bool add_example_bgra32(
                 span<const std::uint32_t> pixels,
@@ -192,7 +192,7 @@
                 {
                     const auto fail = [i](std::string_view reason) -> bool
                     {
-                        std::cerr << "pixelai: rejecting model record "
+                        std::cerr << "vision.recognition_engine: rejecting model record "
                                   << i << ": " << reason << '\n';
                         return false;
                     };
@@ -268,4 +268,4 @@
             vector<Patch> examples_;
         };
 
-    } // namespace pixelai
+    } // namespace vision

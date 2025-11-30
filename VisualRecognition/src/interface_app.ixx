@@ -1,7 +1,7 @@
 module;
 #define NOMINMAX
 #include <windows.h>
-#include "ids.hpp"
+#include "interface_ids.hpp"
 
 #include <vector>
 #include <string>
@@ -11,17 +11,17 @@ module;
 #include <mutex>
 #include <sstream>
 
-export module ui;
+export module interface.app;
 
-import :common;
-import :filesystem;
+import :state;
+import :storage;
 import :capture;
-import :hooks;
+import :mouse_hooks;
 import :layout;
 
-import vr.console_log;
-import vr.macro.core;
-import vr.macro.hooks;
+import diagnostics.console_log;
+import automation.macro.engine;
+import automation.macro.hooks;
 
 export void RunUI(HINSTANCE inst, int show)
 {

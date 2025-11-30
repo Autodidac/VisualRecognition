@@ -1,9 +1,9 @@
 
-    #include <windows.h>
-    import ui;
+#include <windows.h>
+import interface.app;
 
-    int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int cmdShow)
-    {
-        RunUI(instance, cmdShow);
-        return 0;
-    }
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int cmdShow)
+{
+    RunUI(instance, cmdShow);
+    return 0;
+}
