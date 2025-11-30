@@ -5,6 +5,7 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
 ## Features
 - Global hooks for quick actions (left-click to capture anywhere, F5 to classify) even when the window is not focused.
 - Patch preview with simple status messaging.
+- Captures stay centered on the cursor with padding near screen edges, keeping previews and training sizes consistent.
 - One-click learning: add a labeled patch and persist it to `pixelai_examples.bin`.
 - Lightweight cosine-similarity recognizer implemented in C++20 modules.
 
