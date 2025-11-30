@@ -13,6 +13,8 @@ module;
 #include <fstream>
 #include <chrono>
 #include <ctime>
+#include <sstream>
+#include <iomanip>
 
 export module ui;
 
@@ -831,7 +833,10 @@ namespace
             std::wstring msg = L"Classified: ";
             msg += std::wstring(labelOpt->begin(), labelOpt->end());
             msg += L" (score ";
-            msg += std::to_wstring(score);
+
+            std::wostringstream oss;
+            oss << std::fixed << std::setprecision(3) << score;
+            msg += oss.str();
             msg += L")";
             SetStatus(msg);
         }
