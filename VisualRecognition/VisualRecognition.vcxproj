@@ -20,7 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ids.hpp" />
-    <ClInclude Include="src\ui.h" />
+    <ClInclude Include="src\ui.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
