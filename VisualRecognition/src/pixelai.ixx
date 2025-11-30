@@ -268,4 +268,4 @@
             vector<Patch> examples_;
         };
 
-    } // namespace almond::pixelai
+    } // namespace pixelai
