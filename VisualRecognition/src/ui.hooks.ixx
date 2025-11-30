@@ -1,66 +1,89 @@
 module;
 #define NOMINMAX
 #include <windows.h>
-
 #include "ids.hpp"
 
 export module ui:hooks;
 
-import :common;
-import :capture;
-
-namespace ui::detail
+namespace ui
 {
-    // GLOBAL MOUSE HOOK â€” captures anywhere even when app is not focused
-    LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam)
+    namespace detail
     {
-        if (code >= 0)
+        using CaptureCallback = void(*)();
+
+        inline HHOOK           g_uiMouseHook = nullptr;
+        inline HWND            g_uiMainWindow = nullptr;
+        inline CaptureCallback g_captureCallback = nullptr;
+
+        // ---------------------------------------------------------------------
+        // Corrected LL mouse hook
+        // ---------------------------------------------------------------------
+        LRESULT CALLBACK UiMouseProc(int code, WPARAM wp, LPARAM lp)
         {
-            if (g_mouseHookPaused)
-                return ::CallNextHookEx(g_mouseHook, code, wParam, lParam);
+            if (code < 0)
+                return CallNextHookEx(g_uiMouseHook, code, wp, lp);
 
-            auto belongsToMainWindow = [](HWND hwnd)
+            auto* m = reinterpret_cast<MSLLHOOKSTRUCT*>(lp);
+
+            // Ignore injected mouse events (script playback, automation, etc.)
+            if (m->flags & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED))
+                return CallNextHookEx(g_uiMouseHook, code, wp, lp);
+
+            // Only activate capture on actual LButtonUP
+            if (wp == WM_LBUTTONUP && g_captureCallback)
             {
-                if (!hwnd || !g_mainWindow)
-                    return false;
+                HWND underCursor = WindowFromPoint(m->pt);
 
-                HWND root = ::GetAncestor(hwnd, GA_ROOT);
-                return root == g_mainWindow;
-            };
+                // Fix #1 — Only trigger if our app is foreground
+                HWND fg = GetForegroundWindow();
+                if (!fg || GetWindowThreadProcessId(fg, nullptr) != GetCurrentProcessId())
+                    return CallNextHookEx(g_uiMouseHook, code, wp, lp);
 
-            MSLLHOOKSTRUCT* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
-            HWND hitWindow = info ? ::WindowFromPoint(info->pt) : nullptr;
-            HWND foreground = ::GetForegroundWindow();
-
-            if (belongsToMainWindow(foreground) || belongsToMainWindow(hitWindow))
-                return ::CallNextHookEx(g_mouseHook, code, wParam, lParam);
-
-            switch (wParam)
-            {
-            case WM_LBUTTONDOWN:
-                DoCapture();
-                break;
-            }
-        }
-
-        return ::CallNextHookEx(g_mouseHook, code, wParam, lParam);
-    }
-
-    // GLOBAL KEYBOARD HOOK â€” F5 triggers classify even when unfocused
-    LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wParam, LPARAM lParam)
-    {
-        if (code >= 0)
-        {
-            if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)
-            {
-                auto* kbd = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
-                if (kbd && kbd->vkCode == VK_F5)
+                // Fix #2 — If the click is inside our main window OR a child, ignore it
+                if (underCursor &&
+                    (underCursor == g_uiMainWindow ||
+                        IsChild(g_uiMainWindow, underCursor)))
                 {
-                    DoClassify();
+                    return CallNextHookEx(g_uiMouseHook, code, wp, lp);
                 }
-            }
-        }
 
-        return ::CallNextHookEx(g_keyboardHook, code, wParam, lParam);
+                // Fix #3 — Now perform capture (external click)
+                g_captureCallback();
+            }
+
+            return CallNextHookEx(g_uiMouseHook, code, wp, lp);
+        }
     }
-}
+
+    // ---------------------------------------------------------------------
+    // Public API
+    // ---------------------------------------------------------------------
+
+    export void SetUiMainWindow(HWND hwnd) noexcept
+    {
+        detail::g_uiMainWindow = hwnd;
+    }
+
+    export void SetCaptureCallback(detail::CaptureCallback cb) noexcept
+    {
+        detail::g_captureCallback = cb;
+    }
+
+    export bool InstallUiMouseHook(HINSTANCE inst)
+    {
+        detail::g_uiMouseHook =
+            SetWindowsHookExW(WH_MOUSE_LL, detail::UiMouseProc, inst, 0);
+
+        return detail::g_uiMouseHook != nullptr;
+    }
+
+    export void UninstallUiMouseHook()
+    {
+        if (detail::g_uiMouseHook)
+        {
+            UnhookWindowsHookEx(detail::g_uiMouseHook);
+            detail::g_uiMouseHook = nullptr;
+        }
+    }
+
+} // namespace ui

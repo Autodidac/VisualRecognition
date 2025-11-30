@@ -1,23 +1,15 @@
 module;
 #define NOMINMAX
 #include <windows.h>
-
 #include "ids.hpp"
 
-#include <string>
-#include <print>
-#include <vector>
-#include <optional>
-#include <cstdint>
-#include <cstring>
-#include <algorithm>
-#include <filesystem>
-#include <fstream>
 #include <chrono>
-#include <ctime>
-#include <sstream>
-#include <iomanip>
-#include <utility>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
+#include <algorithm> // for std::clamp, if you use it here
 
 export module ui:common;
 
@@ -26,123 +18,124 @@ import pixelai;
 
 namespace ui::detail
 {
-    // Shared constants/state
-    constexpr int  kCaptureRadius = 240;
-    constexpr char kModelFile[] = "pixelai_examples.bin";
-    constexpr int  kDefaultBackupRetention = 5;
-    constexpr int  kDefaultPatchSize = 1;
+    using pixelai::PixelRecognizer;
 
-    HWND g_status = nullptr;
-    HWND g_preview = nullptr;
-    HWND g_historyLabel = nullptr;
-    HWND g_mainWindow = nullptr;
-    HHOOK g_mouseHook = nullptr;
-    HHOOK g_keyboardHook = nullptr;
-    bool g_mouseHookPaused = false;
+    // -----------------------------------------------------------------
+    // Constants
+    // -----------------------------------------------------------------
+    inline constexpr int  kCaptureRadius = 240;
+    inline constexpr int  kDefaultPatchSize = 1;
+    inline constexpr int  kDefaultBackupRetention = 5;
+    inline constexpr char kModelFileName[] = "pixelai_examples.bin";
 
-    almond::pixelai::PixelRecognizer g_ai{};
-
+    // -----------------------------------------------------------------
+    // Types
+    // -----------------------------------------------------------------
     struct Capture
     {
-        std::vector<std::uint32_t> pixels;
-        int width{};
-        int height{};
+        std::vector<std::uint32_t>           pixels;
+        int                                  width{};
+        int                                  height{};
         std::chrono::system_clock::time_point timestamp{};
-        std::optional<std::filesystem::path> filePath;
+        std::optional<std::filesystem::path>  filePath;
     };
 
-    std::vector<Capture> g_history;
-    int g_selectedIndex = -1;
+    // -----------------------------------------------------------------
+    // Global UI state – **single definitions live here**
+    // -----------------------------------------------------------------
+    export inline HWND g_mainWindow = nullptr;
+    export inline HWND g_status = nullptr;
+    export inline HWND g_preview = nullptr;
+    export inline HWND g_historyLabel = nullptr;
+    export inline HWND g_logEdit = nullptr;
 
-    // Text helpers
-    inline std::string narrow_utf8(std::wstring_view wstr)
-    {
-        if (wstr.empty())
-            return {};
+    export inline PixelRecognizer      g_ai{};
+    export inline std::vector<Capture> g_history{};
+    export inline int                  g_selectedIndex = -1;
 
-        int needed = ::WideCharToMultiByte(CP_UTF8, 0,
-            wstr.data(), static_cast<int>(wstr.size()),
-            nullptr, 0, nullptr, nullptr);
-        if (needed <= 0)
-            return {};
+    // -----------------------------------------------------------------
+    // Helper API exported for other partitions
+    // -----------------------------------------------------------------
+    export void SetStatus(const std::wstring& text);
+    export void UpdateHistoryLabel();
+    export Capture* CurrentCaptureMutable();
+    export const Capture* CurrentCapture();
+    export void           SelectCapture(int index);
+}
 
-        std::string result(static_cast<std::size_t>(needed), '\0');
-        ::WideCharToMultiByte(CP_UTF8, 0,
-            wstr.data(), static_cast<int>(wstr.size()),
-            result.data(), needed,
-            nullptr, nullptr);
-        return result;
-    }
-
-    // Status helper
-    inline void SetStatus(std::wstring_view text)
+// ---------------------------------------------------------------------
+// Implementations
+// ---------------------------------------------------------------------
+namespace ui::detail
+{
+    export void SetStatus(const std::wstring& text)
     {
         if (g_status)
-            ::SetWindowTextW(g_status, text.data());
+        {
+            ::SetWindowTextW(g_status, text.c_str());
+        }
     }
 
-    inline std::wstring FormatBackupPath(const std::filesystem::path& path)
+    export const Capture* CurrentCapture()
     {
-        std::error_code ec{};
-        auto absolutePath = std::filesystem::absolute(path, ec);
-        const auto& displayPath = ec ? path : absolutePath;
-        return displayPath.wstring();
-    }
-
-    inline const Capture* CurrentCapture()
-    {
-        if (g_selectedIndex < 0 || g_selectedIndex >= static_cast<int>(g_history.size()))
+        if (g_selectedIndex < 0 ||
+            g_selectedIndex >= static_cast<int>(g_history.size()))
+        {
             return nullptr;
+        }
         return &g_history[static_cast<std::size_t>(g_selectedIndex)];
     }
 
-    inline std::wstring FormatTimestamp(const std::chrono::system_clock::time_point& tp)
+    export Capture* CurrentCaptureMutable()
     {
-        auto t = std::chrono::system_clock::to_time_t(tp);
-        tm localTm{};
-        localtime_s(&localTm, &t);
-
-        wchar_t buffer[64]{};
-        std::wcsftime(buffer, std::size(buffer), L"%Y-%m-%d %H:%M:%S", &localTm);
-        return buffer;
+        if (g_selectedIndex < 0 ||
+            g_selectedIndex >= static_cast<int>(g_history.size()))
+        {
+            return nullptr;
+        }
+        return &g_history[static_cast<std::size_t>(g_selectedIndex)];
     }
 
-    inline void UpdateHistoryLabel()
+    export void UpdateHistoryLabel()
     {
         if (!g_historyLabel)
             return;
 
-        if (g_history.empty() || !CurrentCapture())
+        std::wstring text;
+        if (g_history.empty())
         {
-            ::SetWindowTextW(g_historyLabel, L"No capture selected.");
-            return;
+            text = L"No captures yet.";
         }
-
-        const auto& cap = *CurrentCapture();
-        std::wstring text = L"Capture "
-            + std::to_wstring(static_cast<unsigned long long>(g_selectedIndex + 1))
-            + L"/" + std::to_wstring(static_cast<unsigned long long>(g_history.size()))
-            + L" â€” " + FormatTimestamp(cap.timestamp);
+        else
+        {
+            text = L"Capture ";
+            text += std::to_wstring(static_cast<long long>(g_selectedIndex + 1));
+            text += L" / ";
+            text += std::to_wstring(static_cast<long long>(g_history.size()));
+        }
 
         ::SetWindowTextW(g_historyLabel, text.c_str());
     }
 
-    inline void SelectCapture(int index)
+    export void SelectCapture(int index)
     {
-        if (index < 0 || index >= static_cast<int>(g_history.size()))
+        if (g_history.empty())
+        {
+            g_selectedIndex = -1;
+            UpdateHistoryLabel();
+            if (g_preview)
+                ::InvalidateRect(g_preview, nullptr, TRUE);
             return;
+        }
+
+        index = std::clamp(
+            index,
+            0,
+            static_cast<int>(g_history.size() - 1));
+
         g_selectedIndex = index;
         UpdateHistoryLabel();
         if (g_preview)
             ::InvalidateRect(g_preview, nullptr, TRUE);
-    }
-
-    // Helper to get patch size from recognizer, fallback to default
-    inline std::pair<int, int> GetPatchSize()
-    {
-        // If PixelRecognizer does not have patch_size(), fallback to default
-        // You may want to expose patch size via a config or constant
-        // For now, use kDefaultPatchSize for both width and height
-        return { kDefaultPatchSize, kDefaultPatchSize };
     }
 }

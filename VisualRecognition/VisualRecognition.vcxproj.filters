@@ -42,6 +42,18 @@
     <ClCompile Include="src\pixelai.ixx">
       <Filter>Modules</Filter>
     </ClCompile>
+    <ClCompile Include="src\vr.console_log.ixx">
+      <Filter>Modules</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vr.macro.core.ixx">
+      <Filter>Modules</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vr.macro.hooks.ixx">
+      <Filter>Modules</Filter>
+    </ClCompile>
+    <ClCompile Include="vr.macro.types.ixx">
+      <Filter>Modules</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ids.hpp">

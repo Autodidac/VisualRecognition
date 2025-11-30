@@ -1,347 +1,230 @@
-export module pixelai;
 
-import std;
+    export module pixelai;
 
-export namespace almond::pixelai
-{
-    using std::size_t;
-    using std::span;
-    using std::string;
-    using std::vector;
-    using std::optional;
+    import std;
 
-    struct Patch
+    export namespace pixelai
     {
-        int           width{};
-        int           height{};
-        vector<float> features; // normalized RGB triplets
-    };
+        using std::optional;
+        using std::string;
+        using std::vector;
+        using std::span;
 
-    struct LabeledPatch
-    {
-        string label;
-        Patch  patch;
-    };
-
-    export class PixelRecognizer
-    {
-    public:
-        PixelRecognizer() = default;
-
-        void set_min_confidence(float v) noexcept { min_confidence_ = v; }
-        [[nodiscard]] float min_confidence() const noexcept { return min_confidence_; }
-
-        [[nodiscard]] std::pair<int, int> patch_size() const noexcept
+        struct Patch
         {
-            int w = patch_width_;
-            int h = patch_height_;
+            int                 width{};
+            int                 height{};
+            vector<std::uint32_t> pixels;  // BGRA32
+            string              label;
+        };
 
-            if ((w <= 0 || h <= 0) && !examples_.empty())
-            {
-                w = examples_.front().patch.width;
-                h = examples_.front().patch.height;
-            }
-
-            if (w <= 0 || h <= 0)
-                return { 0, 0 };
-
-            return { w, h };
-        }
-
-        void clear() noexcept
+        // Extremely simple nearest-neighbor patch classifier over BGRA32.
+        //
+        // This is intentionally minimal and deterministic; it is not meant to
+        // be a deep model, just a compact incremental learner that can be
+        // serialized to disk.
+        export class PixelRecognizer
         {
-            examples_.clear();
-            patch_width_  = 0;
-            patch_height_ = 0;
-        }
+        public:
+            PixelRecognizer() = default;
 
-        // pixels are 0xAARRGGBB or 0x00RRGGBB (we only use RGB)
-        [[nodiscard]] bool add_example_bgra32(span<const std::uint32_t> pixels,
-                                              int                        width,
-                                              int                        height,
-                                              std::string                label)
-        {
-            if (width <= 0 || height <= 0 || pixels.size() < static_cast<size_t>(width) * static_cast<size_t>(height))
-                return false;
-
-            // Enforce consistent patch size for simplicity
-            if (!examples_.empty())
+            [[nodiscard]] bool add_example_bgra32(
+                span<const std::uint32_t> pixels,
+                int width,
+                int height,
+                const string& label)
             {
-                if (width != patch_width_ || height != patch_height_)
-                    return false;
-            }
-            else
-            {
-                patch_width_  = width;
-                patch_height_ = height;
-            }
-
-            Patch p = make_patch_from_bgra32(pixels, width, height);
-            if (p.features.empty())
-                return false;
-
-            examples_.push_back(LabeledPatch{
-                .label = std::move(label),
-                .patch = std::move(p)
-            });
-            return true;
-        }
-
-        [[nodiscard]] optional<string> classify_bgra32(span<const std::uint32_t> pixels,
-            int                        width,
-            int                        height,
-            float* out_score = nullptr) const
-        {
-            if (examples_.empty())
-                return std::nullopt;
-
-            if (width != patch_width_ || height != patch_height_)
-                return std::nullopt;
-
-            Patch q = make_patch_from_bgra32(pixels, width, height);
-            if (q.features.empty())
-                return std::nullopt;
-
-            float best_score = -1.0f;
-            auto  best_example = static_cast<LabeledPatch const*>(nullptr);
-
-            std::span<const float> qv{ q.features.data(), q.features.size() };
-
-            for (auto const& ex : examples_)
-            {
-                std::span<const float> ev{ ex.patch.features.data(),
-                                          ex.patch.features.size() };
-                if (ev.size() != qv.size())
-                    continue;
-
-                float s = cosine(ev, qv);
-                if (s > best_score)
+                if (width <= 0 || height <= 0 || pixels.size() !=
+                    static_cast<std::size_t>(width * height))
                 {
-                    best_score = s;
-                    best_example = &ex;
-                }
-            }
-
-            if (!best_example || best_score < min_confidence_)
-                return std::nullopt;
-
-            if (out_score)
-                *out_score = best_score;
-
-            return best_example->label;
-        }
-
-        [[nodiscard]] bool save_to_file(const std::string& path) const
-        {
-            std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
-            if (!ofs)
-                return false;
-
-            const char magic[5] = {'P','X','A','I','1'};
-            ofs.write(magic, sizeof(magic));
-            if (!ofs)
-                return false;
-
-            std::uint32_t count = static_cast<std::uint32_t>(examples_.size());
-            ofs.write(reinterpret_cast<const char*>(&count), sizeof(count));
-            if (!ofs)
-                return false;
-
-            ofs.write(reinterpret_cast<const char*>(&patch_width_), sizeof(patch_width_));
-            ofs.write(reinterpret_cast<const char*>(&patch_height_), sizeof(patch_height_));
-            if (!ofs)
-                return false;
-
-            for (auto const& ex : examples_)
-            {
-                std::uint32_t label_len = static_cast<std::uint32_t>(ex.label.size());
-                ofs.write(reinterpret_cast<const char*>(&label_len), sizeof(label_len));
-                ofs.write(ex.label.data(), static_cast<std::streamsize>(label_len));
-
-                std::uint32_t feat_count = static_cast<std::uint32_t>(ex.patch.features.size());
-                ofs.write(reinterpret_cast<const char*>(&feat_count), sizeof(feat_count));
-                ofs.write(reinterpret_cast<const char*>(ex.patch.features.data()),
-                          static_cast<std::streamsize>(feat_count * sizeof(float)));
-
-                if (!ofs)
-                    return false;
-            }
-
-            return true;
-        }
-
-        [[nodiscard]] bool load_from_file(const std::string& path)
-        {
-            auto reset_state = [this]()
-            {
-                clear();
-            };
-
-            std::ifstream ifs(path, std::ios::binary);
-            if (!ifs)
-            {
-                reset_state();
-                return false;
-            }
-
-            char magic[5]{};
-            ifs.read(magic, sizeof(magic));
-            if (!ifs || magic[0] != 'P' || magic[1] != 'X' || magic[2] != 'A' || magic[3] != 'I')
-            {
-                reset_state();
-                return false;
-            }
-
-            std::uint32_t count{};
-            ifs.read(reinterpret_cast<char*>(&count), sizeof(count));
-            if (!ifs)
-            {
-                reset_state();
-                return false;
-            }
-
-            int file_patch_width{};
-            int file_patch_height{};
-            ifs.read(reinterpret_cast<char*>(&file_patch_width), sizeof(file_patch_width));
-            ifs.read(reinterpret_cast<char*>(&file_patch_height), sizeof(file_patch_height));
-            if (!ifs)
-            {
-                reset_state();
-                return false;
-            }
-
-            if (file_patch_width <= 0 || file_patch_height <= 0)
-            {
-                reset_state();
-                return false;
-            }
-
-            const size_t expected_feat_count = static_cast<size_t>(file_patch_width)
-                                              * static_cast<size_t>(file_patch_height)
-                                              * 3u;
-            if (expected_feat_count == 0
-                || expected_feat_count > static_cast<size_t>(std::numeric_limits<std::uint32_t>::max()))
-            {
-                reset_state();
-                return false;
-            }
-
-            vector<LabeledPatch> tmp;
-            tmp.reserve(count);
-
-            for (std::uint32_t i = 0; i < count; ++i)
-            {
-                std::uint32_t label_len{};
-                ifs.read(reinterpret_cast<char*>(&label_len), sizeof(label_len));
-                if (!ifs)
-                {
-                    reset_state();
-                    return false;
-                }
-
-                string label;
-                label.resize(label_len);
-                ifs.read(label.data(), static_cast<std::streamsize>(label_len));
-                if (!ifs)
-                {
-                    reset_state();
-                    return false;
-                }
-
-                std::uint32_t feat_count{};
-                ifs.read(reinterpret_cast<char*>(&feat_count), sizeof(feat_count));
-                if (!ifs)
-                {
-                    reset_state();
-                    return false;
-                }
-
-                if (static_cast<size_t>(feat_count) != expected_feat_count)
-                {
-                    reset_state();
                     return false;
                 }
 
                 Patch p;
-                p.width  = file_patch_width;
-                p.height = file_patch_height;
-                p.features.resize(expected_feat_count);
+                p.width  = width;
+                p.height = height;
+                p.label  = label;
+                p.pixels.assign(pixels.begin(), pixels.end());
+                examples_.push_back(std::move(p));
+                return true;
+            }
 
-                ifs.read(reinterpret_cast<char*>(p.features.data()),
-                         static_cast<std::streamsize>(feat_count * sizeof(float)));
-                if (!ifs)
+            [[nodiscard]] optional<string> classify_bgra32(
+                span<const std::uint32_t> pixels,
+                int width,
+                int height,
+                float* out_score = nullptr) const
+            {
+                if (examples_.empty())
+                    return std::nullopt;
+
+                if (width <= 0 || height <= 0 ||
+                    pixels.size() != static_cast<std::size_t>(width * height))
                 {
-                    reset_state();
-                    return false;
+                    return std::nullopt;
                 }
 
-                tmp.push_back(LabeledPatch{
-                    .label = std::move(label),
-                    .patch = std::move(p)
-                });
+                const auto downsample = [](span<const std::uint32_t> src,
+                                           int w, int h,
+                                           int targetW,
+                                           int targetH) -> vector<float>
+                {
+                    vector<float> out;
+                    out.resize(static_cast<std::size_t>(targetW * targetH) * 3);
+
+                    for (int ty = 0; ty < targetH; ++ty)
+                    {
+                        const float sy = (ty + 0.5f) * (static_cast<float>(h) / targetH);
+                        const int   syi = std::clamp(static_cast<int>(sy), 0, h - 1);
+
+                        for (int tx = 0; tx < targetW; ++tx)
+                        {
+                            const float sx = (tx + 0.5f) * (static_cast<float>(w) / targetW);
+                            const int   sxi = std::clamp(static_cast<int>(sx), 0, w - 1);
+
+                            const std::uint32_t px = src[static_cast<std::size_t>(syi * w + sxi)];
+
+                            const std::uint8_t b = static_cast<std::uint8_t>( px        & 0xFFu);
+                            const std::uint8_t g = static_cast<std::uint8_t>((px >> 8)  & 0xFFu);
+                            const std::uint8_t r = static_cast<std::uint8_t>((px >> 16) & 0xFFu);
+
+                            const std::size_t dstIndex =
+                                static_cast<std::size_t>(ty * targetW + tx) * 3u;
+
+                            out[dstIndex + 0] = static_cast<float>(r) / 255.0f;
+                            out[dstIndex + 1] = static_cast<float>(g) / 255.0f;
+                            out[dstIndex + 2] = static_cast<float>(b) / 255.0f;
+                        }
+                    }
+
+                    return out;
+                };
+
+                constexpr int kFeatW = 16;
+                constexpr int kFeatH = 16;
+
+                const auto queryFeat = downsample(pixels, width, height, kFeatW, kFeatH);
+
+                auto distance_sq = [](span<const float> a, span<const float> b) -> float
+                {
+                    const std::size_t n = a.size();
+                    float acc = 0.0f;
+                    for (std::size_t i = 0; i < n; ++i)
+                    {
+                        const float d = a[i] - b[i];
+                        acc += d * d;
+                    }
+                    return acc;
+                };
+
+                optional<string> bestLabel;
+                float            bestDist = std::numeric_limits<float>::max();
+
+                vector<float> tmp;
+
+                for (const auto& ex : examples_)
+                {
+                    tmp = downsample(ex.pixels, ex.width, ex.height, kFeatW, kFeatH);
+                    const float d = distance_sq(queryFeat, tmp);
+                    if (d < bestDist)
+                    {
+                        bestDist  = d;
+                        bestLabel = ex.label;
+                    }
+                }
+
+                if (!bestLabel)
+                    return std::nullopt;
+
+                // Turn distance into a crude confidence in [0,1].
+                const float score = 1.0f / (1.0f + std::sqrt(bestDist) * 0.25f);
+                if (out_score)
+                    *out_score = score;
+
+                return bestLabel;
             }
 
-            patch_width_ = file_patch_width;
-            patch_height_ = file_patch_height;
-            examples_ = std::move(tmp);
-            return true;
-        }
-
-    private:
-        int   patch_width_{};
-        int   patch_height_{};
-        float min_confidence_{0.85f};
-        vector<LabeledPatch> examples_{};
-
-        [[nodiscard]] static Patch make_patch_from_bgra32(span<const std::uint32_t> pixels,
-                                                          int                        width,
-                                                          int                        height)
-        {
-            Patch p;
-            p.width  = width;
-            p.height = height;
-            const size_t count = static_cast<size_t>(width) * static_cast<size_t>(height);
-            p.features.reserve(count * 3);
-
-            constexpr float inv255 = 1.0f / 255.0f;
-
-            for (size_t i = 0; i < count; ++i)
+            [[nodiscard]] bool save_to_file(const string& path) const
             {
-                std::uint32_t v = pixels[i];
-                std::uint8_t b = static_cast<std::uint8_t>(v & 0xFFu);
-                std::uint8_t g = static_cast<std::uint8_t>((v >> 8) & 0xFFu);
-                std::uint8_t r = static_cast<std::uint8_t>((v >> 16) & 0xFFu);
+                std::ofstream ofs(path, std::ios::binary);
+                if (!ofs) return false;
 
-                p.features.push_back(r * inv255);
-                p.features.push_back(g * inv255);
-                p.features.push_back(b * inv255);
+                const std::uint32_t count = static_cast<std::uint32_t>(examples_.size());
+                ofs.write(reinterpret_cast<const char*>(&count), sizeof(count));
+
+                for (const auto& ex : examples_)
+                {
+                    const std::uint32_t w  = static_cast<std::uint32_t>(ex.width);
+                    const std::uint32_t h  = static_cast<std::uint32_t>(ex.height);
+                    const std::uint32_t n  = static_cast<std::uint32_t>(ex.pixels.size());
+                    const std::uint32_t ls = static_cast<std::uint32_t>(ex.label.size());
+
+                    ofs.write(reinterpret_cast<const char*>(&w),  sizeof(w));
+                    ofs.write(reinterpret_cast<const char*>(&h),  sizeof(h));
+                    ofs.write(reinterpret_cast<const char*>(&n),  sizeof(n));
+                    ofs.write(reinterpret_cast<const char*>(&ls), sizeof(ls));
+
+                    ofs.write(reinterpret_cast<const char*>(ex.pixels.data()),
+                              static_cast<std::streamsize>(n * sizeof(std::uint32_t)));
+                    ofs.write(ex.label.data(),
+                              static_cast<std::streamsize>(ls));
+                }
+
+                return static_cast<bool>(ofs);
             }
 
-            // L2-normalize
-            float sum_sq = 0.0f;
-            for (float v : p.features)
-                sum_sq += v * v;
-
-            if (sum_sq > 0.0f)
+            [[nodiscard]] bool load_from_file(const string& path)
             {
-                float inv = 1.0f / std::sqrt(sum_sq);
-                for (float& v : p.features)
-                    v *= inv;
+                std::ifstream ifs(path, std::ios::binary);
+                if (!ifs) return false;
+
+                vector<Patch> tmp;
+
+                std::uint32_t count{};
+                ifs.read(reinterpret_cast<char*>(&count), sizeof(count));
+                if (!ifs) return false;
+
+                for (std::uint32_t i = 0; i < count; ++i)
+                {
+                    std::uint32_t w{}, h{}, n{}, ls{};
+                    ifs.read(reinterpret_cast<char*>(&w),  sizeof(w));
+                    ifs.read(reinterpret_cast<char*>(&h),  sizeof(h));
+                    ifs.read(reinterpret_cast<char*>(&n),  sizeof(n));
+                    ifs.read(reinterpret_cast<char*>(&ls), sizeof(ls));
+                    if (!ifs) return false;
+
+                    Patch ex;
+                    ex.width  = static_cast<int>(w);
+                    ex.height = static_cast<int>(h);
+                    ex.pixels.resize(n);
+                    ex.label.resize(ls);
+
+                    ifs.read(reinterpret_cast<char*>(ex.pixels.data()),
+                             static_cast<std::streamsize>(n * sizeof(std::uint32_t)));
+                    ifs.read(ex.label.data(),
+                             static_cast<std::streamsize>(ls));
+
+                    if (!ifs) return false;
+
+                    tmp.push_back(std::move(ex));
+                }
+
+                examples_ = std::move(tmp);
+                return true;
             }
 
-            return p;
-        }
+            [[nodiscard]] bool empty() const noexcept
+            {
+                return examples_.empty();
+            }
 
-        [[nodiscard]] static float cosine(std::span<const float> a,
-            std::span<const float> b) noexcept
-        {
-            if (a.size() != b.size() || a.empty())
-                return -1.0f;
+            [[nodiscard]] std::size_t size() const noexcept
+            {
+                return examples_.size();
+            }
 
-            float dot = 0.0f;
-            for (std::size_t i = 0; i < a.size(); ++i)
-                dot += a[i] * b[i];
-            return dot;
-        }
-    };
-}
+        private:
+            vector<Patch> examples_;
+        };
+
+    } // namespace almond::pixelai
