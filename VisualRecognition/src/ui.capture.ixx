@@ -40,42 +40,71 @@ namespace ui::detail
     // user clicks, and will never offset the anchor when near screen edges.
     // -----------------------------------------------------------------
 
+    constexpr int captureWidth = 360;
+    constexpr int captureHeight = 960;
+    constexpr int halfWidth = captureWidth / 2;
+    constexpr float HEAD_POS = 0.12f;
+    constexpr int headOffsetY = static_cast<int>(captureHeight * HEAD_POS);
+
+    struct CaptureBounds
+    {
+        int desiredLeft;
+        int desiredTop;
+        int left;
+        int top;
+        int right;
+        int bottom;
+
+        [[nodiscard]] constexpr int width() const { return right - left + 1; }
+        [[nodiscard]] constexpr int height() const { return bottom - top + 1; }
+    };
+
+    struct CursorPoint
+    {
+        int x;
+        int y;
+    };
+
+    constexpr CaptureBounds ComputeBounds(CursorPoint pt, int virtualLeft, int virtualTop, int virtualWidth, int virtualHeight)
+    {
+        const int desiredLeft = pt.x - halfWidth;
+        const int desiredTop = pt.y - headOffsetY;
+        const int desiredRight = desiredLeft + captureWidth - 1;
+        const int desiredBottom = desiredTop + captureHeight - 1;
+
+        const int virtualRight = virtualLeft + virtualWidth - 1;
+        const int virtualBottom = virtualTop + virtualHeight - 1;
+
+        CaptureBounds bounds{};
+        bounds.desiredLeft = desiredLeft;
+        bounds.desiredTop = desiredTop;
+        bounds.left = std::clamp(desiredLeft, virtualLeft, virtualRight);
+        bounds.top = std::clamp(desiredTop, virtualTop, virtualBottom);
+        bounds.right = std::clamp(desiredRight, virtualLeft, virtualRight);
+        bounds.bottom = std::clamp(desiredBottom, virtualTop, virtualBottom);
+
+        return bounds;
+    }
+
+    // Coverage for multi-monitor coordinates that cross the primary origin.
+    static_assert(ComputeBounds({ -10, 500 }, -1920, 0, 3840, 1080).left == -190);
+    static_assert(ComputeBounds({ -10, 500 }, -1920, 0, 3840, 1080).width() == captureWidth);
+    static_assert(ComputeBounds({ -1910, 500 }, -1920, 0, 3840, 1080).left == -1920);
+
     std::optional<Capture> CapturePatchAroundCursor()
     {
         POINT pt{};
         if (!::GetCursorPos(&pt))
             return std::nullopt;
 
-        const int screenW = ::GetSystemMetrics(SM_CXSCREEN);
-        const int screenH = ::GetSystemMetrics(SM_CYSCREEN);
+        const int virtualLeft = ::GetSystemMetrics(SM_XVIRTUALSCREEN);
+        const int virtualTop = ::GetSystemMetrics(SM_YVIRTUALSCREEN);
+        const int virtualWidth = ::GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        const int virtualHeight = ::GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-        // -----------------------------
-        // Full-body rectangle parameters
-        // -----------------------------
-        constexpr int captureWidth = 360;
-        constexpr int captureHeight = 960;
-        constexpr int halfWidth = captureWidth / 2;
-        constexpr float HEAD_POS = 0.12f;
-        constexpr int headOffsetY = static_cast<int>(captureHeight * HEAD_POS);
-
-        // -----------------------------
-        // Determine screen rect to capture once
-        // -----------------------------
-        // We capture the bounding rectangle around the full-body area,
-        // clamped within the screen.
-        int left = pt.x - halfWidth;
-        int top = pt.y - headOffsetY;
-        int right = left + captureWidth - 1;
-        int bottom = top + captureHeight - 1;
-
-        // Clamp bounding box
-        left = std::clamp(left, 0, screenW - 1);
-        top = std::clamp(top, 0, screenH - 1);
-        right = std::clamp(right, 0, screenW - 1);
-        bottom = std::clamp(bottom, 0, screenH - 1);
-
-        const int w = right - left + 1;
-        const int h = bottom - top + 1;
+        const auto bounds = ComputeBounds({ pt.x, pt.y }, virtualLeft, virtualTop, virtualWidth, virtualHeight);
+        const int w = bounds.width();
+        const int h = bounds.height();
 
         HDC screenDC = ::GetDC(nullptr);
         HDC memDC = ::CreateCompatibleDC(screenDC);
@@ -112,7 +141,7 @@ namespace ui::detail
         HGDIOBJ old = ::SelectObject(memDC, hbm);
 
         // One fast BitBlt
-        ::BitBlt(memDC, 0, 0, w, h, screenDC, left, top, SRCCOPY | CAPTUREBLT);
+        ::BitBlt(memDC, 0, 0, w, h, screenDC, bounds.left, bounds.top, SRCCOPY | CAPTUREBLT);
 
         ::ReleaseDC(nullptr, screenDC);
 
@@ -128,13 +157,15 @@ namespace ui::detail
         // -----------------------------
         for (int y = 0; y < captureHeight; ++y)
         {
-            int sy = y; // y already aligned due to top/bottom bounds
-            if (sy >= h) sy = h - 1;
+            const int worldY = bounds.desiredTop + y;
+            const int clampedY = std::clamp(worldY, bounds.top, bounds.bottom);
+            const int sy = clampedY - bounds.top;
 
             for (int x = 0; x < captureWidth; ++x)
             {
-                int sx = x;
-                if (sx >= w) sx = w - 1;
+                const int worldX = bounds.desiredLeft + x;
+                const int clampedX = std::clamp(worldX, bounds.left, bounds.right);
+                const int sx = clampedX - bounds.left;
 
                 const uint32_t pixel = src[sy * w + sx];
 
