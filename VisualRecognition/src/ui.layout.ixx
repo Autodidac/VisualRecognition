@@ -4,6 +4,7 @@ module;
 
 #include "ids.hpp"
 
+#include <algorithm>
 #include <string>
 #include <cstring>  // for std::memcpy
 
@@ -35,26 +36,34 @@ namespace ui::detail
         const int w = rc.right - rc.left;
         const int h = rc.bottom - rc.top;
 
-        const int margin = 8;
-        const int spacing = 6;
+        const int margin = 10;
+        const int spacing = 8;
 
-        const int btnW = 96;
-        const int btnH = 28;
-        const int statusH = 24;
-        const int logH = 120;
+        const int btnW = 104;
+        const int btnH = 30;
+        const int statusH = 26;
+        const int logH = 140;
+
+        const int contentW = w - margin * 2;
+        const int logTop = h - margin - logH;
 
         int x = margin;
         int y = margin;
 
+        // Status row anchored to the top for high visibility
+        ::MoveWindow(::GetDlgItem(hwnd, IDC_STATUS),
+            x, y, contentW, statusH, TRUE);
+        y += statusH + spacing;
+
         // Row 0: Mouse coords + Repeat + Record + Clear + Play + Exit
-        const int coordW = 160;
+        const int coordW = 200;
         ::MoveWindow(::GetDlgItem(hwnd, IDC_MACRO_COORDS),
             x, y, coordW, btnH, TRUE);
         x += coordW + spacing;
 
         ::MoveWindow(::GetDlgItem(hwnd, IDC_MACRO_REPEAT),
-            x, y, 80, btnH, TRUE);
-        x += 80 + spacing;
+            x, y, 90, btnH, TRUE);
+        x += 90 + spacing;
 
         ::MoveWindow(::GetDlgItem(hwnd, IDC_MACRO_RECORD),
             x, y, btnW, btnH, TRUE);
@@ -101,16 +110,18 @@ namespace ui::detail
 
         ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_DELETE),
             x, y, btnW, btnH, TRUE);
+        x += btnW + spacing;
 
-        // Preview + history
+        ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_CLEAR_HISTORY),
+            x, y, btnW, btnH, TRUE);
+
+        // Preview + history column
         y += btnH + spacing;
         x = margin;
 
         const int previewTop = y;
-        const int previewBottom = h - logH - statusH - margin * 2;
-        const int previewH = (previewBottom > previewTop)
-            ? (previewBottom - previewTop)
-            : 200;
+        const int availablePreview = (logTop - spacing) - previewTop;
+        const int previewH = (std::max)(availablePreview, 200);
         const int previewW = previewH;
 
         ::MoveWindow(::GetDlgItem(hwnd, IDC_PREVIEW),
@@ -121,20 +132,11 @@ namespace ui::detail
         ::MoveWindow(::GetDlgItem(hwnd, IDC_HISTORY),
             x, y, w - x - margin, btnH, TRUE);
 
-        // Log edit
-        const int logTop = h - logH - statusH - margin;
+        // Log spans the width at the bottom for readability
         ::MoveWindow(::GetDlgItem(hwnd, IDC_LOG_EDIT),
-            margin, logTop,
-            w - margin * 2,
-            logH, TRUE);
-
-        // Status bar
-        const int statusTop = h - statusH - margin / 2;
-        ::MoveWindow(::GetDlgItem(hwnd, IDC_STATUS),
-            margin, statusTop,
-            w - margin * 2,
-            statusH, TRUE);
+            margin, logTop, w - margin * 2, logH, TRUE);
     }
+
 
     // -----------------------------------------------------------------
     // PromptLabel helper
@@ -288,7 +290,7 @@ namespace ui::detail
         BITMAPINFO bmi{};
         bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         bmi.bmiHeader.biWidth = w;
-        bmi.bmiHeader.biHeight = -h;   // top–down
+        bmi.bmiHeader.biHeight = -h;   // topÂ–down
         bmi.bmiHeader.biPlanes = 1;
         bmi.bmiHeader.biBitCount = 32;
         bmi.bmiHeader.biCompression = BI_RGB;
@@ -478,6 +480,15 @@ namespace ui::detail
             ::GetModuleHandleW(nullptr),
             nullptr);
 
+        ::CreateWindowExW(
+            0, L"BUTTON", L"Clear preview",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            0, 0, 0, 0,
+            hwnd,
+            reinterpret_cast<HMENU>(IDC_BTN_CLEAR_HISTORY),
+            ::GetModuleHandleW(nullptr),
+            nullptr);
+
         // Log window
         g_logEdit = ::CreateWindowExW(
             WS_EX_CLIENTEDGE, L"EDIT", L"",
@@ -594,6 +605,9 @@ namespace ui::detail
                 return 0;
             case IDC_BTN_DELETE:
                 DeleteSelectedCapture();
+                return 0;
+            case IDC_BTN_CLEAR_HISTORY:
+                ClearHistory();
                 return 0;
             default:
                 break;

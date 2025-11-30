@@ -61,6 +61,7 @@ namespace ui
                 {
                     IDC_BTN_PREV, IDC_BTN_NEXT, IDC_BTN_DELETE, IDC_BTN_CLASSIFY,
                     IDC_BTN_LEARN, IDC_BTN_CAPTURE, IDC_BTN_PROMPT,
+                    IDC_BTN_CLEAR_HISTORY,
                     IDC_MACRO_RECORD, IDC_MACRO_CLEAR, IDC_MACRO_PLAY,
                     IDC_MACRO_REPEAT, IDC_MACRO_EXIT,
                     IDC_STATUS, IDC_HISTORY, IDC_PREVIEW, IDC_LOG_EDIT
