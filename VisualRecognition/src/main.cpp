@@ -1,4 +1,7 @@
+#include "ui.h"
+
 import ui;
+
 #include <windows.h>
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int cmdShow)
