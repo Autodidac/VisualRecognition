@@ -9,6 +9,10 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <chrono>
+#include <ctime>
 
 export module ui;
 
@@ -24,6 +28,7 @@ namespace
 
     HWND g_status = nullptr;
     HWND g_preview = nullptr;
+    HWND g_historyLabel = nullptr;
     HHOOK g_mouseHook = nullptr;
     HHOOK g_keyboardHook = nullptr;
 
@@ -34,9 +39,129 @@ namespace
         std::vector<std::uint32_t> pixels;
         int width{};
         int height{};
+        std::chrono::system_clock::time_point timestamp{};
     };
 
-    std::optional<Capture> g_lastCapture;
+    std::vector<Capture> g_history;
+    int g_selectedIndex = -1;
+
+    // -------------------------------------------------------------------------
+    // Filesystem helpers
+    // -------------------------------------------------------------------------
+    std::filesystem::path GetHistoryDir()
+    {
+        wchar_t buffer[MAX_PATH]{};
+        DWORD len = ::GetTempPathW(static_cast<DWORD>(std::size(buffer)), buffer);
+        if (len == 0 || len > std::size(buffer))
+        {
+            return std::filesystem::temp_directory_path() / "pixelai_captures";
+        }
+
+        std::filesystem::path dir(buffer);
+        dir /= "pixelai_captures";
+        return dir;
+    }
+
+    bool SaveCaptureToDisk(const Capture& cap)
+    {
+        auto dir = GetHistoryDir();
+        std::error_code ec{};
+        std::filesystem::create_directories(dir, ec);
+
+        auto ticks = std::chrono::duration_cast<std::chrono::milliseconds>(cap.timestamp.time_since_epoch()).count();
+        auto file = dir / (std::to_wstring(ticks) + L".bin");
+
+        int dedupe = 1;
+        while (std::filesystem::exists(file))
+        {
+            file = dir / (std::to_wstring(ticks) + L"_" + std::to_wstring(dedupe) + L".bin");
+            ++dedupe;
+        }
+
+        std::ofstream ofs(file, std::ios::binary | std::ios::trunc);
+        if (!ofs)
+            return false;
+
+        std::int32_t w = cap.width;
+        std::int32_t h = cap.height;
+        std::int64_t t = ticks;
+        std::uint64_t count = cap.pixels.size();
+
+        ofs.write(reinterpret_cast<const char*>(&w), sizeof(w));
+        ofs.write(reinterpret_cast<const char*>(&h), sizeof(h));
+        ofs.write(reinterpret_cast<const char*>(&t), sizeof(t));
+        ofs.write(reinterpret_cast<const char*>(&count), sizeof(count));
+        ofs.write(reinterpret_cast<const char*>(cap.pixels.data()), static_cast<std::streamsize>(count * sizeof(std::uint32_t)));
+
+        return ofs.good();
+    }
+
+    std::optional<Capture> LoadCaptureFromDisk(const std::filesystem::path& path)
+    {
+        std::ifstream ifs(path, std::ios::binary);
+        if (!ifs)
+            return std::nullopt;
+
+        std::int32_t w{};
+        std::int32_t h{};
+        std::int64_t t{};
+        std::uint64_t count{};
+
+        ifs.read(reinterpret_cast<char*>(&w), sizeof(w));
+        ifs.read(reinterpret_cast<char*>(&h), sizeof(h));
+        ifs.read(reinterpret_cast<char*>(&t), sizeof(t));
+        ifs.read(reinterpret_cast<char*>(&count), sizeof(count));
+
+        if (w <= 0 || h <= 0 || count == 0)
+            return std::nullopt;
+
+        std::uint64_t expected = static_cast<std::uint64_t>(w) * static_cast<std::uint64_t>(h);
+        if (count != expected)
+            return std::nullopt;
+
+        std::vector<std::uint32_t> pixels;
+        pixels.resize(count);
+        ifs.read(reinterpret_cast<char*>(pixels.data()), static_cast<std::streamsize>(count * sizeof(std::uint32_t)));
+        if (!ifs)
+            return std::nullopt;
+
+        Capture cap{};
+        cap.width = w;
+        cap.height = h;
+        cap.timestamp = std::chrono::system_clock::time_point{ std::chrono::milliseconds{ t } };
+        cap.pixels = std::move(pixels);
+        return cap;
+    }
+
+    void LoadCaptureHistory()
+    {
+        g_history.clear();
+        g_selectedIndex = -1;
+
+        auto dir = GetHistoryDir();
+        if (!std::filesystem::exists(dir))
+            return;
+
+        std::vector<Capture> loaded;
+        for (auto& entry : std::filesystem::directory_iterator(dir))
+        {
+            if (!entry.is_regular_file())
+                continue;
+
+            auto cap = LoadCaptureFromDisk(entry.path());
+            if (cap)
+                loaded.push_back(std::move(*cap));
+        }
+
+        std::sort(loaded.begin(), loaded.end(), [](const Capture& a, const Capture& b)
+            {
+                return a.timestamp < b.timestamp;
+            });
+
+        g_history = std::move(loaded);
+        if (!g_history.empty())
+            g_selectedIndex = static_cast<int>(g_history.size() - 1);
+    }
 
     // -------------------------------------------------------------------------
     // UTF-8 conversion
@@ -69,14 +194,62 @@ namespace
             ::SetWindowTextW(g_status, text.data());
     }
 
+    const Capture* CurrentCapture()
+    {
+        if (g_selectedIndex < 0 || g_selectedIndex >= static_cast<int>(g_history.size()))
+            return nullptr;
+        return &g_history[static_cast<std::size_t>(g_selectedIndex)];
+    }
+
+    std::wstring FormatTimestamp(const std::chrono::system_clock::time_point& tp)
+    {
+        auto t = std::chrono::system_clock::to_time_t(tp);
+        tm localTm{};
+        localtime_s(&localTm, &t);
+
+        wchar_t buffer[64]{};
+        std::wcsftime(buffer, std::size(buffer), L"%Y-%m-%d %H:%M:%S", &localTm);
+        return buffer;
+    }
+
+    void UpdateHistoryLabel()
+    {
+        if (!g_historyLabel)
+            return;
+
+        if (g_history.empty() || !CurrentCapture())
+        {
+            ::SetWindowTextW(g_historyLabel, L"No capture selected.");
+            return;
+        }
+
+        const auto& cap = *CurrentCapture();
+        std::wstring text = L"Capture "
+            + std::to_wstring(static_cast<unsigned long long>(g_selectedIndex + 1))
+            + L"/" + std::to_wstring(static_cast<unsigned long long>(g_history.size()))
+            + L" — " + FormatTimestamp(cap.timestamp);
+
+        ::SetWindowTextW(g_historyLabel, text.c_str());
+    }
+
+    void SelectCapture(int index)
+    {
+        if (index < 0 || index >= static_cast<int>(g_history.size()))
+            return;
+        g_selectedIndex = index;
+        UpdateHistoryLabel();
+        if (g_preview)
+            ::InvalidateRect(g_preview, nullptr, TRUE);
+    }
+
     // -------------------------------------------------------------------------
-    // Real screen capture around cursor into g_lastCapture (multi-monitor safe)
+    // Real screen capture around cursor (multi-monitor safe)
     // -------------------------------------------------------------------------
-    bool CapturePatchAroundCursor()
+    std::optional<Capture> CapturePatchAroundCursor()
     {
         POINT pt{};
         if (!::GetCursorPos(&pt))
-            return false;
+            return std::nullopt;
 
         const LONG vx = ::GetSystemMetrics(SM_XVIRTUALSCREEN);
         const LONG vy = ::GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -106,14 +279,14 @@ namespace
         int h = static_cast<int>(y1 - y0 + 1);
 
         if (w <= 0 || h <= 0)
-            return false;
+            return std::nullopt;
 
         int offsetX = static_cast<int>(x0 - desiredX0);
         int offsetY = static_cast<int>(y0 - desiredY0);
 
         HDC hdcScreen = ::GetDC(nullptr);
         if (!hdcScreen)
-            return false;
+            return std::nullopt;
 
         BITMAPINFO bmi{};
         bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -129,7 +302,7 @@ namespace
         {
             if (hbm) ::DeleteObject(hbm);
             ::ReleaseDC(nullptr, hdcScreen);
-            return false;
+            return std::nullopt;
         }
 
         HDC hdcMem = ::CreateCompatibleDC(hdcScreen);
@@ -163,13 +336,14 @@ namespace
             std::memcpy(dst, src, static_cast<std::size_t>(w) * sizeof(std::uint32_t));
         }
 
-        g_lastCapture = Capture{
+        Capture cap{
             .pixels = std::move(padded),
             .width = targetW,
-            .height = targetH
+            .height = targetH,
+            .timestamp = std::chrono::system_clock::now()
         };
 
-        return true;
+        return cap;
     }
 
     // Forward for hook
@@ -391,9 +565,10 @@ namespace
 
         const int margin = 14;
         const int spacing = 10;
-        const int btnW = 150;
+        const int btnW = 130;
         const int btnH = 42;
         const int statusH = 38;
+        const int historyH = 22;
 
         int x = margin;
         int y = margin;
@@ -407,9 +582,31 @@ namespace
         ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_CLASSIFY), x, y, btnW, btnH, TRUE);
         x += btnW + spacing;
 
+        ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_PROMPT), x, y, btnW, btnH, TRUE);
+
+        y += btnH + spacing;
+        x = margin;
+
+        ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_PREV), x, y, btnW, btnH, TRUE);
+        x += btnW + spacing;
+
+        ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_NEXT), x, y, btnW, btnH, TRUE);
+        x += btnW + spacing;
+
         ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_EXIT), x, y, btnW, btnH, TRUE);
 
-        int previewY = y + btnH + spacing;
+        int infoY = y + btnH + spacing;
+        if (g_historyLabel)
+        {
+            ::MoveWindow(g_historyLabel,
+                margin,
+                infoY,
+                W - margin * 2,
+                historyH,
+                TRUE);
+        }
+
+        int previewY = infoY + historyH + spacing;
 
         ::MoveWindow(g_preview,
             margin,
@@ -436,10 +633,11 @@ namespace
 
         ::FillRect(hdc, &rc, reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1));
 
-        if (!g_lastCapture)
+        auto current = CurrentCapture();
+        if (!current)
             return;
 
-        const Capture& cap = *g_lastCapture;
+        const Capture& cap = *current;
 
         BITMAPINFO bmi{};
         bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -489,9 +687,17 @@ namespace
     // -------------------------------------------------------------------------
     void DoCapture()
     {
-        if (CapturePatchAroundCursor())
+        auto cap = CapturePatchAroundCursor();
+        if (cap)
         {
-            SetStatus(L"Captured patch (click).");
+            g_history.push_back(std::move(*cap));
+            g_selectedIndex = static_cast<int>(g_history.size() - 1);
+            bool saved = SaveCaptureToDisk(g_history.back());
+            UpdateHistoryLabel();
+            if (saved)
+                SetStatus(L"Captured patch (click).");
+            else
+                SetStatus(L"Captured, but failed to save history entry.");
             if (g_preview)
                 ::InvalidateRect(g_preview, nullptr, TRUE);
         }
@@ -503,16 +709,15 @@ namespace
 
     void DoClassify()
     {
-        if (!g_lastCapture)
+        const auto* cap = CurrentCapture();
+        if (!cap)
         {
             SetStatus(L"No capture to classify.");
             return;
         }
 
-        auto& cap = *g_lastCapture;
-
         float score = 0.0f;
-        auto  labelOpt = g_ai.classify_bgra32(cap.pixels, cap.width, cap.height, &score);
+        auto  labelOpt = g_ai.classify_bgra32(cap->pixels, cap->width, cap->height, &score);
 
         if (labelOpt)
         {
@@ -530,6 +735,44 @@ namespace
 
         if (g_preview)
             ::InvalidateRect(g_preview, nullptr, TRUE);
+    }
+
+    void SelectPreviousCapture()
+    {
+        if (g_history.empty())
+        {
+            SetStatus(L"No capture history available.");
+            return;
+        }
+
+        int target = std::max(g_selectedIndex - 1, 0);
+        if (target == g_selectedIndex)
+        {
+            SetStatus(L"Already at the oldest capture.");
+            return;
+        }
+
+        SelectCapture(target);
+        SetStatus(L"Selected previous capture.");
+    }
+
+    void SelectNextCapture()
+    {
+        if (g_history.empty())
+        {
+            SetStatus(L"No capture history available.");
+            return;
+        }
+
+        int target = std::min(g_selectedIndex + 1, static_cast<int>(g_history.size() - 1));
+        if (target == g_selectedIndex)
+        {
+            SetStatus(L"Already at the newest capture.");
+            return;
+        }
+
+        SelectCapture(target);
+        SetStatus(L"Selected next capture.");
     }
 
     // -------------------------------------------------------------------------
@@ -559,6 +802,24 @@ namespace
                 hwnd, (HMENU)IDC_BTN_CLASSIFY,
                 nullptr, nullptr);
 
+            ::CreateWindowW(L"BUTTON", L"Prompt Label",
+                WS_VISIBLE | WS_CHILD,
+                0, 0, 0, 0,
+                hwnd, (HMENU)IDC_BTN_PROMPT,
+                nullptr, nullptr);
+
+            ::CreateWindowW(L"BUTTON", L"Prev Capture",
+                WS_VISIBLE | WS_CHILD,
+                0, 0, 0, 0,
+                hwnd, (HMENU)IDC_BTN_PREV,
+                nullptr, nullptr);
+
+            ::CreateWindowW(L"BUTTON", L"Next Capture",
+                WS_VISIBLE | WS_CHILD,
+                0, 0, 0, 0,
+                hwnd, (HMENU)IDC_BTN_NEXT,
+                nullptr, nullptr);
+
             ::CreateWindowW(L"BUTTON", L"Exit",
                 WS_VISIBLE | WS_CHILD,
                 0, 0, 0, 0,
@@ -571,11 +832,26 @@ namespace
                 hwnd, (HMENU)IDC_PREVIEW,
                 nullptr, nullptr);
 
+            g_historyLabel = ::CreateWindowW(L"STATIC", L"No captures yet",
+                WS_VISIBLE | WS_CHILD | SS_LEFT,
+                0, 0, 0, 0,
+                hwnd, (HMENU)IDC_HISTORY,
+                nullptr, nullptr);
+
             g_status = ::CreateWindowW(L"STATIC", L"Ready",
                 WS_VISIBLE | WS_CHILD | SS_LEFT,
                 0, 0, 0, 0,
                 hwnd, (HMENU)IDC_STATUS,
                 nullptr, nullptr);
+
+            LoadCaptureHistory();
+            UpdateHistoryLabel();
+            if (!g_history.empty())
+            {
+                SetStatus(L"Loaded capture history from disk.");
+                if (g_preview)
+                    ::InvalidateRect(g_preview, nullptr, TRUE);
+            }
 
             if (!g_ai.load_from_file(kModelFile))
             {
@@ -650,9 +926,18 @@ namespace
                 DoClassify();
                 break;
 
+            case IDC_BTN_PREV:
+                SelectPreviousCapture();
+                break;
+
+            case IDC_BTN_NEXT:
+                SelectNextCapture();
+                break;
+
             case IDC_BTN_LEARN:
             {
-                if (!g_lastCapture)
+                const auto* cap = CurrentCapture();
+                if (!cap)
                 {
                     SetStatus(L"No capture to learn from.");
                     break;
@@ -665,10 +950,9 @@ namespace
                     break;
                 }
 
-                auto& cap = *g_lastCapture;
                 std::string label = narrow_utf8(labelW);
 
-                if (g_ai.add_example_bgra32(cap.pixels, cap.width, cap.height, label))
+                if (g_ai.add_example_bgra32(cap->pixels, cap->width, cap->height, label))
                 {
                     if (g_ai.save_to_file(kModelFile))
                     {
@@ -684,6 +968,28 @@ namespace
                     SetStatus(L"Training failed (size mismatch?).");
                 }
 
+                break;
+            }
+
+            case IDC_BTN_PROMPT:
+            {
+                const auto* cap = CurrentCapture();
+                if (!cap)
+                {
+                    SetStatus(L"No capture selected for labeling.");
+                    break;
+                }
+
+                std::wstring labelW = PromptLabel(hwnd);
+                if (labelW.empty())
+                {
+                    SetStatus(L"Label entry cancelled.");
+                    break;
+                }
+
+                std::wstring status = L"Label recorded: ";
+                status += labelW;
+                SetStatus(status);
                 break;
             }
 
