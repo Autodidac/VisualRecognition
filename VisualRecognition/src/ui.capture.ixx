@@ -316,6 +316,8 @@ namespace ui::detail
         {
             g_selectedIndex = -1;
             UpdateHistoryLabel();
+            if (g_preview)
+                ::InvalidateRect(g_preview, nullptr, TRUE);
             SetStatus(L"Deleted capture; history empty.");
             return;
         }
