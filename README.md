@@ -33,5 +33,8 @@ VisualRecognition is a Windows desktop utility that captures small pixel patches
 - `VERSION`: Semantic version for releases.
 - `docs/`: Developer-facing documentation, including checklists and roadmap.
 
+## Changelog
+- See `docs/CHANGELOG.md` for release notes.
+
 ## Contributing
 New to the codebase? Start with `docs/CONTRIBUTOR_QUICKSTART.md` for a runtime flow overview. See `docs/DEVELOPMENT_CHECKLIST.md` for the steps to follow when making changes. Update `VERSION` and documentation alongside functional updates to keep releases traceable.
