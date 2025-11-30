@@ -30,7 +30,8 @@ namespace ui::detail
         bool accepted{ false };
     };
 
-    inline PromptState g_prompt;
+    // Deliberately non-inline to ensure a concrete definition is emitted for the linker.
+    PromptState g_prompt{};
 
     LRESULT CALLBACK PromptWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
