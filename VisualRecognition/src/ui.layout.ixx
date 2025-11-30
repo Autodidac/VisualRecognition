@@ -1,7 +1,9 @@
 module;
 #define NOMINMAX
 #include <windows.h>
+
 #include "ids.hpp"
+
 #include <string>
 #include <utility>
 #include <filesystem>
