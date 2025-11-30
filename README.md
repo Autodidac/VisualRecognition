@@ -12,7 +12,7 @@ VisualRecognition is a Windows desktop utility that records portrait-sized scree
 - Lightweight cosine-similarity recognizer implemented in C++23 modules.
 
 ## Build
-1. Open `VisualRecognition.sln` in Visual Studio 2026 (MSVC v145 toolset) on Windows.
+1. Open `VisualRecognition.sln` in Visual Studio 2026 (MSVC v146 toolset) on Windows.
 2. Ensure the MSVC toolchain supports C++23 modules.
 3. Build the `VisualRecognition` project; the entry point is `VisualRecognition/src/main.cpp`, which imports the `ui` module.
 
@@ -36,10 +36,8 @@ VisualRecognition is a Windows desktop utility that records portrait-sized scree
 - `BackupRetention` controls how many timestamped copies of `pixelai_examples.bin` to keep in the app directory. Missing, non-numeric, or non-positive values fall back to the default of 5 backups.
 
 ## Project Layout
-- `VisualRecognition/src/interface_app.ixx`: Win32 UI host that wires together the interface partitions (state, capture, storage, layout, and mouse hooks).
-- `VisualRecognition/src/vision_recognition_engine.ixx`: Example-based pixel recognizer and model persistence.
-- `VisualRecognition/src/automation_macro_engine.ixx`: Macro recording/playback engine; `automation_macro_types.ixx` defines shared types and globals, and `automation_macro_hooks.ixx` exposes the hook entry points.
-- `VisualRecognition/src/diagnostics_console_log.ixx`: Console-style logger that flushes messages into the UI log control.
+- `VisualRecognition/src/ui.ixx`: Win32 UI, capture logic, and interaction with the recognizer.
+- `VisualRecognition/src/pixelai.ixx`: Example-based pixel recognizer and model persistence.
 - `VisualRecognition/src/main.cpp`: Entry point that launches the UI.
 - `VERSION`: Semantic version for releases.
 - `docs/`: Developer-facing documentation, including checklists and roadmap.

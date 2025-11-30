@@ -2,12 +2,12 @@ module;
 #define NOMINMAX
 #include <windows.h>
 
-export module automation.macro.types;
+export module vr.macro.types;
 
 import std;
 import <algorithm>;
 
-import diagnostics.console_log;
+import vr.console_log;
 
 namespace macro
 {

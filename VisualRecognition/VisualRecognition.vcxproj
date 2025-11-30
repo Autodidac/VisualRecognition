@@ -19,22 +19,22 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\interface_ids.hpp" />
-    <ClInclude Include="src\interface_app.hpp" />
+    <ClInclude Include="src\ids.hpp" />
+    <ClInclude Include="src\ui.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\vision_recognition_engine.ixx" />
-    <ClCompile Include="src\interface_capture.ixx" />
-    <ClCompile Include="src\interface_state.ixx" />
-    <ClCompile Include="src\interface_storage.ixx" />
-    <ClCompile Include="src\interface_mouse_hooks.ixx" />
-    <ClCompile Include="src\interface_layout.ixx" />
-    <ClCompile Include="src\interface_app.ixx" />
-    <ClCompile Include="src\diagnostics_console_log.ixx" />
-    <ClCompile Include="src\automation_macro_engine.ixx" />
-    <ClCompile Include="src\automation_macro_hooks.ixx" />
-    <ClCompile Include="automation_macro_types.ixx" />
+    <ClCompile Include="src\pixelai.ixx" />
+    <ClCompile Include="src\ui.capture.ixx" />
+    <ClCompile Include="src\ui.common.ixx" />
+    <ClCompile Include="src\ui.filesystem.ixx" />
+    <ClCompile Include="src\ui.hooks.ixx" />
+    <ClCompile Include="src\ui.layout.ixx" />
+    <ClCompile Include="src\ui.ixx" />
+    <ClCompile Include="src\vr.console_log.ixx" />
+    <ClCompile Include="src\vr.macro.core.ixx" />
+    <ClCompile Include="src\vr.macro.hooks.ixx" />
+    <ClCompile Include="vr.macro.types.ixx" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>

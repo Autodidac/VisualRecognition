@@ -2,9 +2,9 @@ module;
 #define NOMINMAX
 #include <windows.h>
 
-export module automation.macro.hooks;
+export module vr.macro.hooks;
 
-// Forward declarations only. Implementations live in automation.macro.engine.
+// Forward declarations only. Implementations live in vr.macro.core.
 export namespace macro
 {
     LRESULT CALLBACK mouse_proc(int code, WPARAM wp, LPARAM lp);

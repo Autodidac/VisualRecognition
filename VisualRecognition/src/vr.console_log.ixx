@@ -2,7 +2,7 @@ module;
 #define NOMINMAX
 #include <windows.h>
 
-export module diagnostics.console_log;
+export module vr.console_log;
 
 import std;
 
@@ -11,7 +11,7 @@ namespace consolelog
     // Custom message for log flush into UI edit control
     export inline constexpr UINT WM_LOG_FLUSH = WM_APP + 42;
 
-    // Internal state â€“ single definition here
+    // Internal state – single definition here
     std::mutex               g_mutex;
     std::vector<std::string> g_queue;
     HWND                     g_host = nullptr;

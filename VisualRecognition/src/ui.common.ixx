@@ -1,7 +1,7 @@
 module;
 #define NOMINMAX
 #include <windows.h>
-#include "interface_ids.hpp"
+#include "ids.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -11,14 +11,14 @@ module;
 #include <vector>
 #include <algorithm> // for std::clamp, if you use it here
 
-export module interface.app:state;
+export module ui:common;
 
 import std;
-import vision.recognition_engine;
+import pixelai;
 
 namespace ui::detail
 {
-    using vision::PatchRecognizer;
+    using pixelai::PixelRecognizer;
 
     // -----------------------------------------------------------------
     // Constants
@@ -41,7 +41,7 @@ namespace ui::detail
     };
 
     // -----------------------------------------------------------------
-    // Global UI state  **single definitions live here**
+    // Global UI state – **single definitions live here**
     // -----------------------------------------------------------------
     export inline HWND g_mainWindow = nullptr;
     export inline HWND g_status = nullptr;
@@ -49,7 +49,7 @@ namespace ui::detail
     export inline HWND g_historyLabel = nullptr;
     export inline HWND g_logEdit = nullptr;
 
-    export inline PatchRecognizer      g_ai{};
+    export inline PixelRecognizer      g_ai{};
     export inline std::vector<Capture> g_history{};
     export inline int                  g_selectedIndex = -1;
     export inline std::atomic_bool     g_isCapturing = false;
