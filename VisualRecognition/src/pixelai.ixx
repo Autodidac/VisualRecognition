@@ -31,6 +31,23 @@ export namespace almond::pixelai
         void set_min_confidence(float v) noexcept { min_confidence_ = v; }
         [[nodiscard]] float min_confidence() const noexcept { return min_confidence_; }
 
+        [[nodiscard]] std::pair<int, int> patch_size() const noexcept
+        {
+            int w = patch_width_;
+            int h = patch_height_;
+
+            if ((w <= 0 || h <= 0) && !examples_.empty())
+            {
+                w = examples_.front().patch.width;
+                h = examples_.front().patch.height;
+            }
+
+            if (w <= 0 || h <= 0)
+                return { 0, 0 };
+
+            return { w, h };
+        }
+
         void clear() noexcept
         {
             examples_.clear();
