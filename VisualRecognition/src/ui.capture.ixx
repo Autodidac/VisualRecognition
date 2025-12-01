@@ -26,9 +26,25 @@ namespace ui::detail
 {
     using pixelai::PixelRecognizer;
 
-    std::string NarrowFromWide(const std::wstring& wstr)
+    export inline std::string NarrowFromWide(const std::wstring& ws)
     {
-        return std::string(wstr.begin(), wstr.end());
+        if (ws.empty()) return {};
+        const int len = ::WideCharToMultiByte(CP_UTF8, 0, ws.data(), (int)ws.size(), nullptr, 0, nullptr, nullptr);
+        if (len <= 0) return {};
+        std::string out((size_t)len, '\0');
+        ::WideCharToMultiByte(CP_UTF8, 0, ws.data(), (int)ws.size(), out.data(), len, nullptr, nullptr);
+        return out;
+    }
+
+    export inline std::string NarrowFromWide(const wchar_t* w)
+    {
+        if (!w || !*w) return {};
+        const int lenW = ::lstrlenW(w);
+        const int len = ::WideCharToMultiByte(CP_UTF8, 0, w, lenW, nullptr, 0, nullptr, nullptr);
+        if (len <= 0) return {};
+        std::string out((size_t)len, '\0');
+        ::WideCharToMultiByte(CP_UTF8, 0, w, lenW, out.data(), len, nullptr, nullptr);
+        return out;
     }
 
     // -----------------------------------------------------------------
