@@ -21,12 +21,15 @@ import std;
 import pixelai;
 import :common;
 import :filesystem;
-import vr.macro.types;
-import vr.macro.core;
 
 namespace ui::detail
 {
     using pixelai::PixelRecognizer;
+
+    std::string NarrowFromWide(const std::wstring& wstr)
+    {
+        return std::string(wstr.begin(), wstr.end());
+    }
 
     // -----------------------------------------------------------------
     // FULL-BODY CAPTURE (mouse = head anchor)
@@ -269,7 +272,6 @@ namespace ui::detail
                << L" stored).";
         SetStatus(status.str());
 
-        macro::g_lastTick.store(macro::nowMs());
     }
 
     export void DoLearnFromSelected(const std::wstring& labelW)
@@ -286,7 +288,7 @@ namespace ui::detail
             return;
         }
 
-        const std::string label = macro::narrow_from_wide(labelW);
+        const std::string label = NarrowFromWide(labelW);
 
         const bool ok =
             g_ai.add_example_bgra32(

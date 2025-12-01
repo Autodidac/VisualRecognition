@@ -1,7 +1,7 @@
 
     #pragma once
 
-    // Control IDs for unified VisualRecognition + Macro UI.
+    // Control IDs for the VisualRecognition UI.
 
     enum : int {
         // AI controls
@@ -18,13 +18,8 @@
         IDC_PREVIEW,
         IDC_HISTORY,
 
-        // Macro / automation controls
-        IDC_MACRO_COORDS,
-        IDC_MACRO_REPEAT,
-        IDC_MACRO_RECORD,
-        IDC_MACRO_CLEAR,
-        IDC_MACRO_PLAY,
-        IDC_MACRO_EXIT,
+        // Utility / status
+        IDC_MOUSE_COORDS,
 
         // Log/output
         IDC_LOG_EDIT

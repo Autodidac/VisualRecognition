@@ -17,8 +17,6 @@ import :common;
 import :capture;
 import :filesystem;
 import vr.console_log;
-import vr.macro.core;
-import vr.macro.hooks;
 
 using consolelog::WM_LOG_FLUSH;
 
@@ -55,30 +53,15 @@ namespace ui::detail
             x, y, contentW, statusH, TRUE);
         y += statusH + spacing;
 
-        // Row 0: Mouse coords + Repeat + Record + Clear + Play + Exit
+        // Row 0: Mouse coords + Exit
         const int coordW = 200;
-        ::MoveWindow(::GetDlgItem(hwnd, IDC_MACRO_COORDS),
+        const int exitW = 80;
+        ::MoveWindow(::GetDlgItem(hwnd, IDC_MOUSE_COORDS),
             x, y, coordW, btnH, TRUE);
         x += coordW + spacing;
 
-        ::MoveWindow(::GetDlgItem(hwnd, IDC_MACRO_REPEAT),
-            x, y, 90, btnH, TRUE);
-        x += 90 + spacing;
-
-        ::MoveWindow(::GetDlgItem(hwnd, IDC_MACRO_RECORD),
-            x, y, btnW, btnH, TRUE);
-        x += btnW + spacing;
-
-        ::MoveWindow(::GetDlgItem(hwnd, IDC_MACRO_CLEAR),
-            x, y, btnW, btnH, TRUE);
-        x += btnW + spacing;
-
-        ::MoveWindow(::GetDlgItem(hwnd, IDC_MACRO_PLAY),
-            x, y, btnW, btnH, TRUE);
-        x += btnW + spacing;
-
-        ::MoveWindow(::GetDlgItem(hwnd, IDC_MACRO_EXIT),
-            x, y, btnW, btnH, TRUE);
+        ::MoveWindow(::GetDlgItem(hwnd, IDC_BTN_EXIT),
+            x, y, exitW, btnH, TRUE);
 
         // Row 1: AI buttons
         x = margin;
@@ -361,58 +344,13 @@ namespace ui::detail
             ::GetModuleHandleW(nullptr),
             nullptr);
 
-        // Macro controls
+        // Utility controls
         ::CreateWindowExW(
             0, L"STATIC", L"Mouse: (0,0)",
             WS_CHILD | WS_VISIBLE | SS_LEFT,
             0, 0, 0, 0,
             hwnd,
-            reinterpret_cast<HMENU>(IDC_MACRO_COORDS),
-            ::GetModuleHandleW(nullptr),
-            nullptr);
-
-        ::CreateWindowExW(
-            0, L"BUTTON", L"Repeat",
-            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-            0, 0, 0, 0,
-            hwnd,
-            reinterpret_cast<HMENU>(IDC_MACRO_REPEAT),
-            ::GetModuleHandleW(nullptr),
-            nullptr);
-
-        ::CreateWindowExW(
-            0, L"BUTTON", L"Record",
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            0, 0, 0, 0,
-            hwnd,
-            reinterpret_cast<HMENU>(IDC_MACRO_RECORD),
-            ::GetModuleHandleW(nullptr),
-            nullptr);
-
-        ::CreateWindowExW(
-            0, L"BUTTON", L"Clear",
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            0, 0, 0, 0,
-            hwnd,
-            reinterpret_cast<HMENU>(IDC_MACRO_CLEAR),
-            ::GetModuleHandleW(nullptr),
-            nullptr);
-
-        ::CreateWindowExW(
-            0, L"BUTTON", L"Play",
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            0, 0, 0, 0,
-            hwnd,
-            reinterpret_cast<HMENU>(IDC_MACRO_PLAY),
-            ::GetModuleHandleW(nullptr),
-            nullptr);
-
-        ::CreateWindowExW(
-            0, L"BUTTON", L"Exit",
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            0, 0, 0, 0,
-            hwnd,
-            reinterpret_cast<HMENU>(IDC_MACRO_EXIT),
+            reinterpret_cast<HMENU>(IDC_MOUSE_COORDS),
             ::GetModuleHandleW(nullptr),
             nullptr);
 
@@ -423,6 +361,15 @@ namespace ui::detail
             0, 0, 0, 0,
             hwnd,
             reinterpret_cast<HMENU>(IDC_BTN_CAPTURE),
+            ::GetModuleHandleW(nullptr),
+            nullptr);
+
+        ::CreateWindowExW(
+            0, L"BUTTON", L"Exit",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            0, 0, 0, 0,
+            hwnd,
+            reinterpret_cast<HMENU>(IDC_BTN_EXIT),
             ::GetModuleHandleW(nullptr),
             nullptr);
 
@@ -520,7 +467,7 @@ namespace ui::detail
             static_cast<long>(pt.x),
             static_cast<long>(pt.y));
 
-        ::SetWindowTextW(::GetDlgItem(hwnd, IDC_MACRO_COORDS), buf);
+        ::SetWindowTextW(::GetDlgItem(hwnd, IDC_MOUSE_COORDS), buf);
     }
 
     // -----------------------------------------------------------------
@@ -560,26 +507,7 @@ namespace ui::detail
         case WM_COMMAND:
             switch (LOWORD(wParam))
             {
-            case IDC_MACRO_RECORD:
-                macro::toggle_record();
-                return 0;
-            case IDC_MACRO_CLEAR:
-                macro::clear_macro();
-                return 0;
-            case IDC_MACRO_PLAY:
-                macro::toggle_play();
-                return 0;
-            case IDC_MACRO_REPEAT:
-            {
-                const BOOL checked =
-                    (::SendMessageW(::GetDlgItem(hwnd, IDC_MACRO_REPEAT),
-                        BM_GETCHECK, 0, 0) == BST_CHECKED);
-                macro::set_repeat(checked != FALSE);
-            }
-            return 0;
-            case IDC_MACRO_EXIT:
             case IDC_BTN_EXIT:
-                macro::request_exit();
                 ::PostQuitMessage(0);
                 return 0;
 
@@ -630,7 +558,6 @@ namespace ui::detail
             return 0;
 
         case WM_DESTROY:
-            macro::request_exit();
             ::PostQuitMessage(0);
             return 0;
         }
@@ -660,7 +587,7 @@ namespace ui::detail
         HWND hwnd = ::CreateWindowExW(
             0,
             kClassName,
-            L"Visual Recognition + Macro",
+            L"Visual Recognition",
             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
             CW_USEDEFAULT, CW_USEDEFAULT,
             1024, 768,
