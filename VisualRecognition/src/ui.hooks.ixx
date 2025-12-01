@@ -39,7 +39,7 @@ namespace ui
 
             auto* m = reinterpret_cast<MSLLHOOKSTRUCT*>(lp);
 
-            // Ignore artificial events (macro playback, SendInput)
+            // Ignore artificial events (SendInput, synthesized clicks)
             if (m->flags & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED))
                 return ::CallNextHookEx(g_uiMouseHook, code, wp, lp);
 
@@ -61,9 +61,8 @@ namespace ui
                 {
                     IDC_BTN_PREV, IDC_BTN_NEXT, IDC_BTN_DELETE, IDC_BTN_CLASSIFY,
                     IDC_BTN_LEARN, IDC_BTN_CAPTURE, IDC_BTN_PROMPT,
-                    IDC_BTN_CLEAR_HISTORY,
-                    IDC_MACRO_RECORD, IDC_MACRO_CLEAR, IDC_MACRO_PLAY,
-                    IDC_MACRO_REPEAT, IDC_MACRO_EXIT,
+                    IDC_BTN_CLEAR_HISTORY, IDC_BTN_EXIT,
+                    IDC_MOUSE_COORDS,
                     IDC_STATUS, IDC_HISTORY, IDC_PREVIEW, IDC_LOG_EDIT
                 };
 
