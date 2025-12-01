@@ -22,6 +22,7 @@ import :layout;
 import vr.console_log;
 import vr.macro.core;
 import vr.macro.hooks;
+import vr.macro.types;
 
 export void RunUI(HINSTANCE inst, int show)
 {
