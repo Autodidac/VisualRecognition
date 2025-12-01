@@ -51,7 +51,7 @@
     <ClCompile Include="src\vr.macro.hooks.ixx">
       <Filter>Modules</Filter>
     </ClCompile>
-    <ClCompile Include="vr.macro.types.ixx">
+    <ClCompile Include="src\vr.macro.types.ixx">
       <Filter>Modules</Filter>
     </ClCompile>
   </ItemGroup>

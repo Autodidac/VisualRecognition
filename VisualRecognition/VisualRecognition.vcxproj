@@ -33,7 +33,7 @@
     <ClCompile Include="src\vr.console_log.ixx" />
     <ClCompile Include="src\vr.macro.core.ixx" />
     <ClCompile Include="src\vr.macro.hooks.ixx" />
-    <ClCompile Include="vr.macro.types.ixx" />
+    <ClCompile Include="src\vr.macro.types.ixx" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
